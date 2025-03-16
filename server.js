@@ -1,3 +1,4 @@
+46
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -14,7 +15,7 @@ app.use(bodyParser.json());
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.ANTHROPIC_API_KEY),
 });
 
 // Create a system prompt for ROY's personality
