@@ -1,4 +1,43 @@
-// server.js - Express server for ROY chatbot
+const express = require('express');
+const path = require('path'); // Add this to handle file paths
+const app = express();
+
+// Middleware to parse incoming JSON requests
+app.use(express.json());
+
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Explicitly serve index.html for the root path
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Chatbot logic: Respond to user messages
+app.post('/chat', (req, res) => {
+    const userMessage = req.body.message.toLowerCase();
+
+    // Simple predefined responses
+    let botResponse = "Sorry, I don't understand that.";
+    if (userMessage.includes("hello") || userMessage.includes("hi")) {
+        botResponse = "Hello! How can I help you today?";
+    } else if (userMessage.includes("how are you")) {
+        botResponse = "I'm doing great, thanks for asking!";
+    } else if (userMessage.includes("bye")) {
+        botResponse = "Goodbye! Have a nice day!";
+    }
+
+    res.json({ reply: botResponse });
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});// 
+server.js 
+- Express server for ROY 
+chatbot
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
