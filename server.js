@@ -1,4 +1,6 @@
-45
+const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+});45
 46
 const express = require('express');
 const cors = require('cors');
@@ -44,5 +46,5 @@ const PORT = process.env.PORT || 3000; // Use port 3000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-X
+
 
