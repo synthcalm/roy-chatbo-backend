@@ -56,6 +56,8 @@ app.post('/api/chat', async (req, res) => {
 
         const systemPrompt = createSystemPrompt(userProfile);
 
+        console.log("Anthropic client:", anthropic); // Added for debugging
+
         const response = await anthropic.messages.create({
             model: 'claude-3-sonnet-20240229',
             max_tokens: 500,
