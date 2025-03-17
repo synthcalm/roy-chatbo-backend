@@ -103,11 +103,9 @@ app.post('/api/exercise', async (req, res) => {
         `;
 
         const response = await anthropic.messages.create({
-            model: 'claude-3-sonnet-20240229',
-            max_tokens: 500,
-            temperature: 0.7,
-            system: systemPrompt,
-            messages: [{ role: 'user', content: 'Suggest some exercises' }],
+            model: "claude-3-sonnet-20240229",
+            messages: [{ role: "user", content: "Test message" }],
+            max_tokens: 10,
         });
 
         const exerciseSuggestions = response.content[0].text;
