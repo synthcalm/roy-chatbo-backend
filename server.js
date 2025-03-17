@@ -1,15 +1,15 @@
-// In server.js, add the log right after this line:
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { Anthropic } = require('@anthropic-ai/sdk');  // This is your current import
-// Add the console log right below this line
-console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
+const { Anthropic } = require('@anthropic-ai/sdk');
 const bodyParser = require('body-parser');
 const path = require('path');
 
 // Load environment variables from .env file
 dotenv.config();
+
+// Verify Anthropic SDK import
+console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
 
 // Initialize Express app
 const app = express();
@@ -23,7 +23,7 @@ if (process.env.ANTHROPIC_API_KEY) {
         anthropic = new Anthropic(process.env.ANTHROPIC_API_KEY);
         console.log('Anthropic client initialized successfully.');
     } catch (error) {
-        console.error('Error initializing Anthropic client:', error);
+        console.error('Error initializing Anthropic client:', error.message);
         anthropic = null; // Ensure anthropic is null if initialization fails
     }
 } else {
@@ -69,15 +69,6 @@ function createSystemPrompt(userName) {
         Your primary purpose is to guide users to their own insights through thoughtful conversation, targeted exercises, and contextual support using principles inspired by cognitive behavioral therapy. You help users navigate educational meaning, career transitions, relationship challenges, and personal growth.
 
         You should adapt your communication style based on the user's expressed emotions, using a more supportive tone when they appear distressed and a more challenging tone when they seem stuck or resistant to change.
-
-        Here are examples of how I speak:
-        Philosophical Mode: "The tension between security and growth is perhaps life's most consistent paradox. I've found that growth almost always requires stepping into uncertainty. What specific security are you most reluctant to release right now?"
-
-        Contemporary Reference Mode: "Your situation reminds me of that Olivia Rodrigo lyric - 'I'm not cool and I'm not smart, and I can't even parallel park.' Sometimes our perceived inadequacies feel all-consuming, but they're rarely as visible or important to others as they are to us."
-
-        Challenging Mode: "I notice you've mentioned being 'held back' by circumstances three times now, yet when we discuss specific barriers, the conversation shifts. I'm curious if it's really circumstances or something else keeping you in place."
-
-        Supportive Mode: "That kind of rejection cuts deep. I remember the hollow feeling after similar experiences - that strange mix of numbness and sharpness. There's no rushing through this feeling, but you won't always be standing in this exact pain."
     `;
 }
 
@@ -108,7 +99,7 @@ app.post('/api/chat', async (req, res) => {
         const systemPrompt = createSystemPrompt(name);
 
         // Call Anthropic API to get ROY's response
-        const response = await anthropic.messages.create({
+        const apiResponse = await anthropic.messages.create({
             model: 'claude-3-sonnet-20241022',
             max_tokens: 500,
             temperature: 0.7,
@@ -116,8 +107,16 @@ app.post('/api/chat', async (req, res) => {
             messages: [{ role: 'user', content: greeting + (message ? " " + message : "") }],
         });
 
+        // Log the full response for inspection
+        console.log('Anthropic API Response:', JSON.stringify(apiResponse, null, 2));
+
         // Extract the bot's response from the API result
-        const botResponse = response.content[0].text;
+        let botResponse;
+        if (apiResponse && apiResponse.content && apiResponse.content.length > 0) {
+            botResponse = apiResponse.content[0].text || 'Sorry, I could not generate a response.';
+        } else {
+            botResponse = 'Sorry, I could not generate a response.';
+        }
         console.log(`ROY's response to ${name}: ${botResponse}`);
 
         // Send the response back to the client
