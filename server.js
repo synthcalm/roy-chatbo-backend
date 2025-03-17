@@ -37,6 +37,11 @@ app.post('/api/save-conversation', (req, res) => {
   // ... (your /api/save-conversation endpoint)
 });
 
+// Add route handler for the root path
+app.get('/', (req, res) => {
+  res.send('Welcome to the ROY Chatbot API!');
+});
+
 // Start server
 const PORT = process.env.PORT || 3000; // Use port 3000
 app.listen(PORT, () => {
