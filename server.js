@@ -11,6 +11,9 @@ dotenv.config();
 // Verify Anthropic SDK import
 console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
 
+// Log the ANTHROPIC_API_KEY to verify it's loaded
+console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY);
+
 // Initialize Express app
 const app = express();
 app.use(cors());
