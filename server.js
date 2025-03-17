@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
-const bodyParser = required('body-parser');
+const bodyParser = require('body-parser'); // Fixed: 'required' -> 'require'
 
 // Load environment variables
 dotenv.config();
