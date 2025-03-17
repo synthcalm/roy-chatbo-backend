@@ -1,11 +1,14 @@
+// In server.js, add the log right after this line:
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { Anthropic } = require('@anthropic-ai/sdk');  // This is your current import
+// Add the console log right below this line
+console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
 const bodyParser = require('body-parser');
 const path = require('path');
 
-// Load environment variables
+// Load environment variables from .env file
 dotenv.config();
 
 // Initialize Express app
@@ -17,20 +20,21 @@ app.use(bodyParser.json());
 let anthropic;
 if (process.env.ANTHROPIC_API_KEY) {
     try {
-        anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        anthropic = new Anthropic(process.env.ANTHROPIC_API_KEY);
+        console.log('Anthropic client initialized successfully.');
     } catch (error) {
         console.error('Error initializing Anthropic client:', error);
         anthropic = null; // Ensure anthropic is null if initialization fails
     }
 } else {
-    console.error('ANTHROPIC_API_KEY is not set.');
+    console.error('ANTHROPIC_API_KEY is not set in environment variables.');
     anthropic = null;
 }
 
 // In-memory storage for conversations (replace with a real database in production)
 let conversations = {};
 
-// Greeting lists
+// Greeting list for ROY's initial messages
 const greetings = [
     "Hi, [Name]. I'm Roy. I'm here to listen. What's on your mind?",
     "Hello, [Name]. I'm Roy, ready to chat. How can I help today?",
@@ -77,45 +81,94 @@ function createSystemPrompt(userName) {
     `;
 }
 
-// Chat endpoint
+// Chat endpoint to handle user messages
 app.post('/api/chat', async (req, res) => {
     try {
+        // Check if Anthropic client is initialized
         if (!anthropic) {
-            return res.status(500).json({ error: 'Anthropic client is not initialized.' });
+            console.error('Anthropic client not initialized in /api/chat.');
+            return res.status(500).json({ error: 'Anthropic client is not initialized. Please check if ANTHROPIC_API_KEY is set.' });
         }
 
         const { userName, message } = req.body;
-        const name = userName || "User"; // Use provided name or default to "User"
 
+        // Validate request body
+        if (!message) {
+            console.warn('No message provided in /api/chat request.');
+            return res.status(400).json({ error: 'Message is required.' });
+        }
+
+        const name = userName || "User"; // Default to "User" if no name is provided
+        console.log(`Processing message from ${name}: ${message}`);
+
+        // Generate a random greeting and replace [Name] with the user's name
         const greeting = greetings[Math.floor(Math.random() * greetings.length)].replace("[Name]", name);
 
+        // Create the system prompt for ROY
         const systemPrompt = createSystemPrompt(name);
 
+        // Call Anthropic API to get ROY's response
         const response = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-3-sonnet-20241022',
             max_tokens: 500,
             temperature: 0.7,
             system: systemPrompt,
             messages: [{ role: 'user', content: greeting + (message ? " " + message : "") }],
         });
 
+        // Extract the bot's response from the API result
         const botResponse = response.content[0].text;
+        console.log(`ROY's response to ${name}: ${botResponse}`);
 
+        // Send the response back to the client
         res.json({ response: botResponse });
     } catch (error) {
-        console.error('Error in /api/chat:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error in /api/chat:', error.message);
+        res.status(500).json({ error: 'Internal server error. Please try again later.' });
     }
 });
 
-// Exercise suggestions endpoint (unchanged)
+// Exercise suggestions endpoint (stub implementation)
 app.post('/api/exercise', async (req, res) => {
-    // ... (your exercise endpoint code) ...
+    try {
+        const { userName, context } = req.body;
+
+        if (!context) {
+            return res.status(400).json({ error: 'Context is required for exercise suggestion.' });
+        }
+
+        // Placeholder: In a real implementation, this would generate an exercise based on the context
+        const exercise = `Here's an exercise for ${userName || "User"}: Reflect on ${context} by writing down three things you learned from this experience.`;
+        console.log(`Generated exercise for ${userName || "User"}: ${exercise}`);
+
+        res.json({ exercise });
+    } catch (error) {
+        console.error('Error in /api/exercise:', error.message);
+        res.status(500).json({ error: 'Internal server error. Please try again later.' });
+    }
 });
 
-// Save message to database endpoint (in-memory stub for now) (unchanged)
+// Save message to database endpoint (in-memory stub for now)
 app.post('/api/save-conversation', (req, res) => {
-    // ... (your save conversation endpoint code) ...
+    try {
+        const { userName, message, response } = req.body;
+
+        if (!userName || !message || !response) {
+            return res.status(400).json({ error: 'userName, message, and response are required.' });
+        }
+
+        // Store conversation in memory (replace with database in production)
+        if (!conversations[userName]) {
+            conversations[userName] = [];
+        }
+        conversations[userName].push({ message, response, timestamp: new Date() });
+        console.log(`Saved conversation for ${userName}: ${message} -> ${response}`);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error in /api/save-conversation:', error.message);
+        res.status(500).json({ error: 'Internal server error. Please try again later.' });
+    }
 });
 
 // Serve static files from the 'public' directory
@@ -126,7 +179,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
+// Start the server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
