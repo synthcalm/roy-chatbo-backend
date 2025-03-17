@@ -59,7 +59,7 @@ app.post('/api/chat', async (req, res) => {
         console.log("Anthropic client:", anthropic); // Added for debugging
 
         const response = await anthropic.messages.create({
-            model: 'claude-3-opus',
+            model: 'claude-3-5-sonnet-20241022',
             max_tokens: 500,
             temperature: 0.7,
             system: systemPrompt,
@@ -103,7 +103,7 @@ app.post('/api/exercise', async (req, res) => {
         `;
 
         const response = await anthropic.messages.create({
-            model: "claude-3-opus",
+            model: "claude-3-5-sonnet-20241022",
             messages: [{ role: "user", content: "Test message" }],
             max_tokens: 10,
         });
