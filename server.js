@@ -1,7 +1,3 @@
-const anthropic = new Anthropic({)
-    apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -18,7 +14,7 @@ app.use(bodyParser.json());
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY),
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // Create a system prompt for ROY's personality
@@ -46,5 +42,3 @@ const PORT = process.env.PORT || 3000; // Use port 3000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-
