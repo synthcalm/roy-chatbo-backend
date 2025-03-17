@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
-const bodyParser = require('body-parser');
+const bodyParser = required('body-parser');
 
 // Load environment variables
 dotenv.config();
@@ -43,7 +43,7 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3000; // Use port 3000
+const PORT = process.env.PORT || 10000; // Use port 10000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
