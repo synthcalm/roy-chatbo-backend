@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const bodyParser = require('body-parser');
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -140,8 +141,9 @@ app.post('/api/save-conversation', (req, res) => {
 });
 
 // Add route handler for the root path
+app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
-    res.send('Welcome to the ROY Chatbot API!');
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start server
