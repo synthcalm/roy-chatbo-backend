@@ -1,37 +1,33 @@
-const userNameInput = document.getElementById('user-name');
-const messageInput = document.getElementById('message-input');
-const sendButton = document.getElementById('send-button');
-const messagesDiv = document.getElementById('messages');
+// DOM Elements
+const messagesDiv = document.getElementById('messages'); // Messages container
+const userInput = document.getElementById('user-input'); // User input field
+const sendButton = document.getElementById('send-button'); // Send button
 
+// Add event listener to the send button
 sendButton.addEventListener('click', () => {
-    const userName = userNameInput.value;
-    const message = messageInput.value;
-    if (message) {
-        // Display the user's message immediately
-        messagesDiv.innerHTML += `<p><strong>You:</strong> ${message}</p>`;
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    const message = userInput.value.trim(); // Get the user's message and trim whitespace
 
+    if (message) {
+        // Send the message to the server via a POST request
         fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ userName: userName, message: message })
+            body: JSON.stringify({ message: message }) // Send only the message (no userName)
         })
-        .then(response => response.json())
+        .then(response => response.json()) // Parse the response as JSON
         .then(data => {
-            if (data.error) {
-                messagesDiv.innerHTML += `<p><strong>Error:</strong> ${data.error}</p>`;
-            } else {
-                messagesDiv.innerHTML += `<p><strong>Bot:</strong> ${data.response}</p>`;
-            }
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            // Append the bot's response to the messages container
+            messagesDiv.innerHTML += `<p><strong>Bot:</strong> ${data.response}</p>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to the bottom
         })
         .catch(error => {
-            console.error('Error:', error);
-            messagesDiv.innerHTML += `<p><strong>Error:</strong> Failed to connect to the server.</p>`;
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            console.error('Error communicating with the server:', error);
+            messagesDiv.innerHTML += `<p><strong>Error:</strong> An error occurred while processing your request.</p>`;
         });
-        messageInput.value = '';
+
+        // Clear the input field after sending the message
+        userInput.value = '';
     }
 });

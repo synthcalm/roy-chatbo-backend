@@ -1,60 +1,84 @@
-* {
-    box-sizing: border-box;
-}
-
+/* General Reset */
 body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    margin: 0;
-    background-color: #d3d3d3; /* Gray background */
-    font-family: Helvetica, Arial, sans-serif; /* Black and white Helvetica fonts */
-    color: #000000; /* Default text color (black) */
+    min-height: 100vh; /* Ensure the body takes up the full viewport height */
 }
 
+/* Chat Container */
 #chat-container {
-    width: 80%;
-    max-width: 600px;
+    width: 80%; /* Adjust width for larger screens */
+    max-width: 600px; /* Maximum width to prevent it from getting too wide */
     border: 1px solid #ccc;
-    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    margin: 0 auto; /* Fallback centering */
-    font-family: Helvetica, Arial, sans-serif; /* Ensure chat container uses Helvetica */
-    color: #000000; /* Ensure chat text is black */
+    overflow: hidden; /* Prevent content from overflowing the container */
 }
 
+/* Messages Area */
 #messages {
-    height: 300px;
-    overflow-y: auto;
-    border-bottom: 1px solid #ccc;
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto; /* Enable vertical scrolling for messages */
+    border-bottom: 1px solid #ddd;
+}
+
+/* Message Styling */
+.message {
     margin-bottom: 10px;
-    flex-grow: 1;
-    font-family: Helvetica, Arial, sans-serif; /* Ensure messages use Helvetica */
-    color: #000000; /* Ensure messages are black */
+    word-wrap: break-word; /* Ensure long words don't overflow */
 }
 
-/* Style for the "SynthCalm" text in the top left */
-#synthcalm-text {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    font-size: 24pt;
-    font-family: Helvetica, Arial, sans-serif;
+.message.user {
+    text-align: right;
+    color: #007bff; /* Blue for user messages */
 }
 
-#synthcalm-text span:first-child {
-    color: #000000; /* "Synth" in black */
+.message.bot {
+    text-align: left;
+    color: #333; /* Dark gray for bot messages */
 }
 
-#synthcalm-text span:last-child {
-    color: #ffffff; /* "Calm" in white */
+/* Input Area */
+#input-area {
+    display: flex;
+    padding: 10px;
+    background-color: #fafafa;
+    border-top: 1px solid #ddd;
 }
 
+#user-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+#send-button {
+    margin-left: 10px;
+    padding: 10px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+#send-button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Media Query for Smaller Screens */
 @media (max-width: 768px) {
     #chat-container {
-        width: 95%;
+        width: 95%; /* Make it take up more width on smaller screens */
     }
 }
