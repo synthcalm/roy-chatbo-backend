@@ -13,9 +13,9 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
 // In-memory storage for conversations (replace with a real database in production)
 let conversations = {};
