@@ -12,7 +12,11 @@ dotenv.config();
 console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
 
 // Log the ANTHROPIC_API_KEY to verify it's loaded
-console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY);
+if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('ANTHROPIC_API_KEY is not set in environment variables.');
+} else {
+    console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY);
+}
 
 // Initialize Express app
 const app = express();
@@ -23,19 +27,19 @@ app.use(bodyParser.json());
 let anthropic;
 if (process.env.ANTHROPIC_API_KEY) {
     try {
-        anthropic = new Anthropic(process.env.ANTHROPIC_API_KEY);
+        anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         console.log('Anthropic client initialized successfully.');
     } catch (error) {
         console.error('Error initializing Anthropic client:', error.message);
         anthropic = null; // Ensure anthropic is null if initialization fails
     }
 } else {
-    console.error('ANTHROPIC_API_KEY is not set in environment variables.');
+    console.error('ANTHROPIC_API_KEY is not set. Anthropic client will not be initialized.');
     anthropic = null;
 }
 
 // In-memory storage for conversations (replace with a real database in production)
-let conversations = {};
+const conversations = {};
 
 // Greeting list for ROY's initial messages
 const greetings = [
@@ -77,24 +81,23 @@ function createSystemPrompt(userName) {
 
 // Chat endpoint to handle user messages
 app.post('/api/chat', async (req, res) => {
+    if (!anthropic) {
+        console.error('Anthropic client not initialized in /api/chat.');
+        return res.status(500).json({ error: 'Anthropic client is not initialized. Please check if ANTHROPIC_API_KEY is set.' });
+    }
+
+    const { userName, message } = req.body;
+
+    // Validate request body
+    if (!message) {
+        console.warn('No message provided in /api/chat request.');
+        return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const name = userName || "User"; // Default to "User" if no name is provided
+    console.log(`Processing message from ${name}: ${message}`);
+
     try {
-        // Check if Anthropic client is initialized
-        if (!anthropic) {
-            console.error('Anthropic client not initialized in /api/chat.');
-            return res.status(500).json({ error: 'Anthropic client is not initialized. Please check if ANTHROPIC_API_KEY is set.' });
-        }
-
-        const { userName, message } = req.body;
-
-        // Validate request body
-        if (!message) {
-            console.warn('No message provided in /api/chat request.');
-            return res.status(400).json({ error: 'Message is required.' });
-        }
-
-        const name = userName || "User"; // Default to "User" if no name is provided
-        console.log(`Processing message from ${name}: ${message}`);
-
         // Generate a random greeting and replace [Name] with the user's name
         const greeting = greetings[Math.floor(Math.random() * greetings.length)].replace("[Name]", name);
 
@@ -114,12 +117,7 @@ app.post('/api/chat', async (req, res) => {
         console.log('Anthropic API Response:', JSON.stringify(apiResponse, null, 2));
 
         // Extract the bot's response from the API result
-        let botResponse;
-        if (apiResponse && apiResponse.content && apiResponse.content.length > 0) {
-            botResponse = apiResponse.content[0].text || 'Sorry, I could not generate a response.';
-        } else {
-            botResponse = 'Sorry, I could not generate a response.';
-        }
+        const botResponse = apiResponse?.content?.[0]?.text || 'Sorry, I could not generate a response.';
         console.log(`ROY's response to ${name}: ${botResponse}`);
 
         // Send the response back to the client
@@ -132,17 +130,16 @@ app.post('/api/chat', async (req, res) => {
 
 // Exercise suggestions endpoint (stub implementation)
 app.post('/api/exercise', async (req, res) => {
+    const { userName, context } = req.body;
+
+    if (!context) {
+        return res.status(400).json({ error: 'Context is required for exercise suggestion.' });
+    }
+
     try {
-        const { userName, context } = req.body;
-
-        if (!context) {
-            return res.status(400).json({ error: 'Context is required for exercise suggestion.' });
-        }
-
         // Placeholder: In a real implementation, this would generate an exercise based on the context
         const exercise = `Here's an exercise for ${userName || "User"}: Reflect on ${context} by writing down three things you learned from this experience.`;
         console.log(`Generated exercise for ${userName || "User"}: ${exercise}`);
-
         res.json({ exercise });
     } catch (error) {
         console.error('Error in /api/exercise:', error.message);
@@ -152,20 +149,19 @@ app.post('/api/exercise', async (req, res) => {
 
 // Save message to database endpoint (in-memory stub for now)
 app.post('/api/save-conversation', (req, res) => {
+    const { userName, message, response } = req.body;
+
+    if (!userName || !message || !response) {
+        return res.status(400).json({ error: 'userName, message, and response are required.' });
+    }
+
     try {
-        const { userName, message, response } = req.body;
-
-        if (!userName || !message || !response) {
-            return res.status(400).json({ error: 'userName, message, and response are required.' });
-        }
-
         // Store conversation in memory (replace with database in production)
         if (!conversations[userName]) {
             conversations[userName] = [];
         }
         conversations[userName].push({ message, response, timestamp: new Date() });
         console.log(`Saved conversation for ${userName}: ${message} -> ${response}`);
-
         res.json({ success: true });
     } catch (error) {
         console.error('Error in /api/save-conversation:', error.message);
