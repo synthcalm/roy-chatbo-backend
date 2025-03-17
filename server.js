@@ -103,8 +103,8 @@ app.post('/api/chat', async (req, res) => {
         // Get API response
         const apiResponse = await anthropic.messages.create({
             model: 'claude-3-haiku-20240307',
-            max_tokens: 140,
-            temperature: 0.8,
+            max_tokens: 300,
+            temperature: 0.7,
             system: systemPrompt,
             messages: convo.history
         });
