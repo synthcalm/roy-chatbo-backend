@@ -106,7 +106,7 @@ app.post('/api/chat', async (req, res) => {
 
         // Call Anthropic API to get ROY's response
         const apiResponse = await anthropic.messages.create({
-            model: 'claude-3-sonnet-20240229',
+            model: 'claude-3-5-sonnet',
             max_tokens: 500,
             temperature: 0.7,
             system: systemPrompt,
