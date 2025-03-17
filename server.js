@@ -30,34 +30,11 @@ if (process.env.ANTHROPIC_API_KEY) {
 // In-memory storage for conversations (replace with a real database in production)
 let conversations = {};
 
-// Database placeholders (replace with your actual database logic)
-const db = {
-    getUser: async (uid) => {
-        // Replace with your database query to get user by uid
-        return null; // Return null if user not found
-    },
-    createUser: async (uid) => {
-        // Replace with your database query to create a new user
-        return { uid, isNewUser: true, usedGreetings: [] };
-    },
-    updateUser: async (user) => {
-        // Replace with your database query to update user data
-    }
-};
-
 // Greeting lists
-const newGreetings = [
-    "Hi. I'm Roy. I'm here to listen. What should I call you?",
-    "Hello there, I'm Roy. I'm ready to chat. What's your name?",
-    "Greetings, I'm Roy. I'm all ears. What name would you like me to use?"
-];
-
-const returningGreetings = [
-    "Welcome back, [Name]. How are things today?",
-    "It's good to see you again, [Name]. What's on your mind?",
-    "Hello, [Name]. What brings you here today?",
-    "Ah, [Name], you are back. How can I assist you today?",
-    "Good to see you, [Name]. What's the latest?"
+const greetings = [
+    "Hi, [Name]. I'm Roy. I'm here to listen. What's on your mind?",
+    "Hello, [Name]. I'm Roy, ready to chat. How can I help today?",
+    "Greetings, [Name]. I'm Roy. What would you like to discuss?"
 ];
 
 // Create a system prompt for ROY's personality
@@ -107,33 +84,12 @@ app.post('/api/chat', async (req, res) => {
             return res.status(500).json({ error: 'Anthropic client is not initialized.' });
         }
 
-        const { uid, message, userName } = req.body;
-        let user = await db.getUser(uid);
+        const { userName, message } = req.body;
+        const name = userName || "User"; // Use provided name or default to "User"
 
-        if (!user) {
-            user = await db.createUser(uid);
-        }
+        const greeting = greetings[Math.floor(Math.random() * greetings.length)].replace("[Name]", name);
 
-        let greeting;
-        if (user.isNewUser) {
-            greeting = newGreetings[Math.floor(Math.random() * newGreetings.length)];
-            user.isNewUser = false;
-        } else {
-            const availableGreetings = returningGreetings.filter(g => !user.usedGreetings.includes(g));
-            if (availableGreetings.length === 0) {
-                user.usedGreetings = [];
-            }
-            greeting = availableGreetings[Math.floor(Math.random() * availableGreetings.length)].replace("[Name]", user.name || userName || "User");
-            user.usedGreetings.push(greeting);
-        }
-
-        if (userName && !user.name) {
-            user.name = userName;
-        }
-
-        await db.updateUser(user);
-
-        const systemPrompt = createSystemPrompt(user.name || "User");
+        const systemPrompt = createSystemPrompt(name);
 
         const response = await anthropic.messages.create({
             model: 'claude-3-5-sonnet-20241022',
