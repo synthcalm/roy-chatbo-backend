@@ -173,10 +173,3 @@ function processResponse(rawText, userMessage, userId) {
     const neutralResponses = ["I see.", "Interesting.", "Tell me more."];
 
     let responseType = 'neutral';
-    if (userMessage.toLowerCase().includes('good') || userMessage.toLowerCase().includes('great')) {
-        responseType = 'positive';
-    } else if (userMessage.toLowerCase().includes('bad') || userMessage.toLowerCase().includes('sad')) {
-        responseType = 'negative';
-    }
-
-    let selectedResponse;
