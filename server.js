@@ -18,7 +18,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
 console.log('API Key loaded successfully');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: 'https://roy-chatbo-backend.onrender.com' })); // Explicitly allow the client origin
 app.use(bodyParser.json());
 
 let anthropic;
@@ -149,8 +149,11 @@ app.post('/api/chat', async (req, res) => {
     }
 
     if (!anthropic.messages || typeof anthropic.messages.create !== 'function') {
-        console.error('Anthropic messages API not available or incompatible');
-        return res.status(503).json({ response: "My messaging service is down. Please try again later or contact support." });
+        console.error('Anthropic messages API not available or incompatible. Using fallback response.');
+        const { message } = req.body;
+        const isNeutralGreeting = message.toLowerCase().trim() === 'hello' || message.toLowerCase().trim() === 'hi' || message.toLowerCase().trim() === 'hey';
+        const fallbackResponse = isNeutralGreeting ? "Hello! I'm ROY, here to assist you. May I have your name, please?" : "Sorry, I can't process your request right now. Try again later.";
+        return res.json({ response: fallbackResponse });
     }
 
     const { userId, userName, preferredName, message } = req.body;
@@ -193,7 +196,7 @@ app.post('/api/chat', async (req, res) => {
         let apiResponse;
         try {
             apiResponse = await anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20241022', // Updated to a plausible current model
+                model: 'claude-3-5-sonnet-20241022',
                 max_tokens: 500,
                 temperature: 0.7,
                 system: systemPrompt,
@@ -201,7 +204,9 @@ app.post('/api/chat', async (req, res) => {
             });
         } catch (apiError) {
             console.error('Anthropic API error:', apiError.message);
-            return res.status(500).json({ response: "Sorry, I can't process your request right now. Try again later." });
+            const isNeutralGreeting = message.toLowerCase().trim() === 'hello' || message.toLowerCase().trim() === 'hi' || message.toLowerCase().trim() === 'hey';
+            const fallbackResponse = isNeutralGreeting ? "Hello! I'm ROY, here to assist you. May I have your name, please?" : "Sorry, I can't process your request right now. Try again later.";
+            return res.json({ response: fallbackResponse });
         }
 
         const rawResponse = apiResponse?.content?.[0]?.text || '';
