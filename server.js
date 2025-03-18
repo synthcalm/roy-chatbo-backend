@@ -7,37 +7,32 @@ const path = require('path');
 
 dotenv.config();
 
-// Log initial setup for debugging on Render
 console.log('Starting ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
-console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
+console.log('Anthropic SDK Version:', Anthropic?.VERSION || 'unknown');
 
-// Validate environment variables
 if (!process.env.ANTHROPIC_API_KEY) {
     console.error('ANTHROPIC_API_KEY is missing! Please set it in Render environment variables.');
     process.exit(1);
 }
 console.log('API Key loaded successfully');
 
-// Initialize Express app
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Initialize Anthropic client
 let anthropic;
 try {
     anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     console.log('Anthropic client initialized successfully');
+    console.log('Anthropic messages property:', anthropic?.messages ? 'Available' : 'Not available');
 } catch (error) {
-    console.error('Failed to initialize Anthropic client:', error.message);
+    console.error('Anthropic client initialization failed:', error.message);
     anthropic = null;
 }
 
-// Store conversations per user
 const conversations = {};
 
-// Create system prompt for the bot
 function createSystemPrompt(userId, userData) {
     const { name, preferredName, isNewUser, sessionDuration } = userData;
     const timeRemaining = sessionDuration ? Math.max(0, 60 - sessionDuration) : 60;
@@ -89,7 +84,6 @@ function createSystemPrompt(userId, userData) {
     - Use their name naturally throughout the conversation, but not excessively.
     `;
 
-    // Neutral greeting for new users
     const greetingRule = isNewUser
         ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
         : `Continue the ongoing conversation without making assumptions about the user's emotional state unless explicitly mentioned in their message.`;
@@ -97,17 +91,14 @@ function createSystemPrompt(userId, userData) {
     return `${baseRules}\n${greetingRule}`;
 }
 
-// Process the bot's response to ensure appropriateness
 function processResponse(rawText, userMessage) {
     if (!rawText) return "I didn't catch that. Could you repeat your message?";
 
-    // Limit to 3 sentences for brevity
     const sentences = rawText.split(/[.!?]/).filter(s => s.trim().length > 0);
     const limitedSentences = sentences.slice(0, 3);
     let processedResponse = limitedSentences.join('. ').trim();
     if (!processedResponse.match(/[.!?]$/)) processedResponse += '.';
 
-    // Determine if the topic warrants a longer response
     const isComplexTopic = 
         userMessage.toLowerCase().includes('suicide') || 
         userMessage.toLowerCase().includes('geopolitics') || 
@@ -124,7 +115,6 @@ function processResponse(rawText, userMessage) {
         userMessage.toLowerCase().includes('help me') ||
         userMessage.toLowerCase().includes('feel better');
 
-    // Check for neutral greetings to avoid assumptions
     const isNeutralGreeting = 
         userMessage.toLowerCase().trim() === 'hello' || 
         userMessage.toLowerCase().trim() === 'hi' || 
@@ -133,12 +123,10 @@ function processResponse(rawText, userMessage) {
     const maxLength = (isComplexTopic || isUserRequestingMore || isCBTGuidanceNeeded) ? 500 : 160;
     processedResponse = processedResponse.substring(0, maxLength);
 
-    // Override response for neutral greetings to prevent assumptions
     if (isNeutralGreeting && (processedResponse.toLowerCase().includes('fatigue') || processedResponse.toLowerCase().includes('tired') || processedResponse.toLowerCase().includes('draining'))) {
         processedResponse = "Hello! I'm ROY, here to assist you. May I have your name, please?";
     }
 
-    // Truncate with a prompt for more info if needed
     if (maxLength === 160 && processedResponse.length >= 140) {
         processedResponse = processedResponse.substring(0, 110) + '. Ask for more if needed.';
     }
@@ -146,7 +134,6 @@ function processResponse(rawText, userMessage) {
     return processedResponse;
 }
 
-// Handle errors gracefully
 function handleError(res, error) {
     console.error('API Error:', error.message, error.stack);
     res.status(500).json({ 
@@ -155,11 +142,15 @@ function handleError(res, error) {
     });
 }
 
-// Chat endpoint
 app.post('/api/chat', async (req, res) => {
     if (!anthropic) {
         console.error('Anthropic client not initialized');
         return res.status(503).json({ response: "I'm having connection issues. Please try again later." });
+    }
+
+    if (!anthropic.messages) {
+        console.error('Anthropic messages API not available');
+        return res.status(503).json({ response: "My messaging service is down. Please try again later." });
     }
 
     const { userId, userName, preferredName, message } = req.body;
@@ -171,7 +162,6 @@ app.post('/api/chat', async (req, res) => {
     const userIdentifier = userId || userName || 'anonymous';
 
     try {
-        // Initialize conversation if it doesn't exist
         if (!conversations[userIdentifier]) {
             conversations[userIdentifier] = {
                 history: [],
@@ -199,6 +189,7 @@ app.post('/api/chat', async (req, res) => {
 
         const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
 
+        console.log('Calling Anthropic API with prompt:', systemPrompt);
         const apiResponse = await anthropic.messages.create({
             model: 'claude-3-sonnet-20240229',
             max_tokens: 500,
@@ -213,7 +204,6 @@ app.post('/api/chat', async (req, res) => {
         convo.history.push({ role: 'assistant', content: royResponse });
         convo.lastInteraction = Date.now();
 
-        // Limit conversation history to prevent memory bloat
         if (convo.history.length > 10) {
             convo.history = convo.history.slice(-10);
         }
@@ -224,10 +214,8 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Start the server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
