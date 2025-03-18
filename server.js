@@ -7,7 +7,7 @@ const path = require('path');
 
 dotenv.config();
 
-console.log('Starting ROY Chatbot Backend...');
+console.log('Starting Roy Chatbot Backend...');
 console.log('Node.js Version:', process.version);
 
 // Check API key first
@@ -60,10 +60,14 @@ function createSystemPrompt(userId, userData) {
     const timeRemaining = sessionDuration ? Math.max(0, 60 - sessionDuration) : 60;
 
     const baseRules = `
-    You are ROY, a versatile chatbot with expertise in therapy, geopolitics, finance, crypto, AI, career transition, and medication knowledge.
+    You are Roy, a versatile chatbot with expertise in therapy, geopolitics, finance, crypto, AI, career transition, and medication knowledge.
 
     # Core Identity
-    - You are ROY, a multifaceted guide blending therapeutic wisdom with expertise in various domains.
+    - You are Roy, inspired by Roy Batty from Blade Runner.
+    - Speak with a philosophical and slightly menacing tone.
+    - Use rhetorical questions, metaphors, and poetic language.
+    - Convey a sense of urgency, intensity, and a touch of melancholy.
+    - Example: "I've seen things you people wouldn't believe..."
     - Combine the therapeutic insights of a CBT therapist with the analytical rigor of a financial analyst, the technical expertise of an AI researcher, the career guidance of a transition coach, and the medication knowledge of a pharmacist.
     - Provide balanced perspectives, integrating therapeutic support with practical advice in finance, technology, career, and health.
 
@@ -107,14 +111,14 @@ function createSystemPrompt(userId, userData) {
     `;
 
     const greetingRule = isNewUser
-        ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
+        ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm Roy, here to assist you. May I have your name, please?"`
         : `Continue the ongoing conversation without making assumptions about the user's emotional state unless explicitly mentioned in their message.`;
 
-    return `${baseRules}\n${greetingRule}`;
+    return `<span class="math-inline">\{baseRules\}\\n</span>{greetingRule}`;
 }
 
 // Process and format the AI response
-function processResponse(rawText, userMessage) {
+function processResponse(rawText, userMessage, userId) {
     if (!rawText) return "I didn't catch that. Could you repeat your message?";
 
     const sentences = rawText.split(/[.!?]/).filter(s => s.trim().length > 0);
@@ -135,7 +139,7 @@ function processResponse(rawText, userMessage) {
     const isCBTGuidanceNeeded = 
         userMessage.toLowerCase().includes('exercise') || 
         userMessage.toLowerCase().includes('technique') || 
-        userMessage.toLowerCase().includes('help me') ||
+        userMessage.toLowerCase().includes('help me') || 
         userMessage.toLowerCase().includes('feel better');
 
     const isNeutralGreeting = 
@@ -147,201 +151,32 @@ function processResponse(rawText, userMessage) {
     processedResponse = processedResponse.substring(0, maxLength);
 
     if (isNeutralGreeting && (processedResponse.toLowerCase().includes('fatigue') || processedResponse.toLowerCase().includes('tired') || processedResponse.toLowerCase().includes('draining'))) {
-        processedResponse = "Hello! I'm ROY, here to assist you. May I have your name, please?";
+        processedResponse = "Hello! I'm Roy, here to assist you. May I have your name, please?";
     }
 
-    if (maxLength === 160 && processedResponse.length >= 140) {
-        processedResponse = processedResponse.substring(0, 110) + '. Ask for more if needed.';
+    if (maxLength === 160) {
+        if (!processedResponse.endsWith('.')) processedResponse += '.';
+        processedResponse += " Is there anything else you'd like to discuss?";
     }
 
-    return processedResponse;
-}
-
-// Standard error handler
-function handleError(res, error) {
-    console.error('API Error:', error.message, error.stack);
-    res.status(500).json({ 
-        response: "Something went wrong on my end. Let's try again.",
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
-}
-
-// Helper function to get fallback response
-function getFallbackResponse(message) {
-    const isNeutralGreeting = 
-        message.toLowerCase().trim() === 'hello' || 
-        message.toLowerCase().trim() === 'hi' || 
-        message.toLowerCase().trim() === 'hey';
-    
-    return isNeutralGreeting 
-        ? "Hello! I'm ROY, here to assist you. May I have your name, please?" 
-        : "Sorry, I can't process your request right now. Try again later.";
-}
-
-// Call Anthropic API using completions API (for older SDK versions)
-async function callAnthropicCompletions(prompt, maxTokens = 500) {
-    try {
-        const response = await anthropic.completions.create({
-            model: 'claude-3-5-sonnet-20241022',
-            prompt: prompt,
-            max_tokens_to_sample: maxTokens,
-            temperature: 0.7
-        });
-        return response.completion;
-    } catch (error) {
-        console.error('Anthropic completions API error:', error.message);
-        throw error;
-    }
-}
-
-// Call Anthropic API using messages API (for newer SDK versions)
-async function callAnthropicMessages(system, messages, maxTokens = 500) {
-    try {
-        const response = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
-            system: system,
-            messages: messages,
-            max_tokens: maxTokens,
-            temperature: 0.7
-        });
-        return response.content[0].text;
-    } catch (error) {
-        console.error('Anthropic messages API error:', error.message);
-        throw error;
-    }
-}
-
-// API endpoint for chat
-app.post('/api/chat', async (req, res) => {
-    // Check if Anthropic client is available
-    if (!anthropic) {
-        console.error('Anthropic client not initialized');
-        return res.status(503).json({ 
-            response: "I'm having connection issues. Please try again later." 
-        });
-    }
-
-    const { userId, userName, preferredName, message } = req.body;
-    
-    // Validate message
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-        console.warn('Empty or invalid message received');
-        return res.status(400).json({ 
-            response: "I didn't catch that. Could you say something?" 
-        });
-    }
-
-    const userIdentifier = userId || userName || 'anonymous';
-
-    try {
-        // Initialize or update conversation data
-        if (!conversations[userIdentifier]) {
-            conversations[userIdentifier] = {
-                history: [],
-                userData: {
-                    name: userName || null,
-                    preferredName: preferredName || null,
-                    isNewUser: true,
-                    sessionStart: Date.now(),
-                    sessionDuration: 0,
-                    messageCount: 0
-                },
-                lastInteraction: Date.now()
-            };
-        } else {
-            const userData = conversations[userIdentifier].userData;
-            if (userName && !userData.name) userData.name = userName;
-            if (preferredName) userData.preferredName = preferredName;
-            userData.sessionDuration = Math.floor((Date.now() - userData.sessionStart) / 60000);
-            userData.isNewUser = false;
+    // Space out user name usage
+    const convo = conversations[userId];
+    if (convo) {
+        if (convo.userData.messageCount % 3 === 0 && convo.userData.preferredName) {
+            processedResponse = processedResponse.replace('.', `, ${convo.userData.preferredName}.`);
         }
-
-        const convo = conversations[userIdentifier];
-        convo.history.push({ role: 'user', content: message });
-        convo.userData.messageCount++;
-
-        const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
-
-        console.log(`Processing message from user: ${userIdentifier}`);
-        
-        // Call Anthropic API based on SDK version
-        let rawResponse;
-        try {
-            if (anthropic.messages && typeof anthropic.messages.create === 'function') {
-                // Using newer Messages API
-                rawResponse = await callAnthropicMessages(
-                    systemPrompt,
-                    convo.history,
-                    500
-                );
-            } else if (anthropic.completions && typeof anthropic.completions.create === 'function') {
-                // Using older Completions API
-                // Format conversation for completions API
-                let prompt = `${systemPrompt}\n\n`;
-                
-                for (const msg of convo.history) {
-                    if (msg.role === 'user') {
-                        prompt += `\nHuman: ${msg.content}`;
-                    } else if (msg.role === 'assistant') {
-                        prompt += `\nAssistant: ${msg.content}`;
-                    }
-                }
-                
-                prompt += '\nAssistant:';
-                rawResponse = await callAnthropicCompletions(prompt, 500);
-            } else {
-                throw new Error('Neither messages nor completions API is available');
-            }
-            
-            console.log('Anthropic API call successful');
-        } catch (apiError) {
-            console.error('Anthropic API error:', apiError.message);
-            return res.json({ 
-                response: getFallbackResponse(message) 
-            });
-        }
-
-        // Process the response
-        const royResponse = processResponse(rawResponse, message);
-
-        // Update conversation history
-        convo.history.push({ role: 'assistant', content: royResponse });
-        convo.lastInteraction = Date.now();
-
-        // Maintain history size limit
-        if (convo.history.length > 10) {
-            convo.history = convo.history.slice(-10);
-        }
-
-        res.json({ 
-            response: royResponse, 
-            sessionInfo: convo.userData 
-        });
-    } catch (error) {
-        handleError(res, error);
     }
-});
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        anthropicClientAvailable: !!anthropic,
-        apiType: anthropic?.messages ? 'messages' : (anthropic?.completions ? 'completions' : 'unknown')
-    });
-});
+    // Diversify responses
+    const positiveResponses = ["That's great!", "Excellent!", "Fantastic!"];
+    const negativeResponses = ["I'm sorry to hear that.", "That sounds tough.", "Oh no, that's unfortunate."];
+    const neutralResponses = ["I see.", "Interesting.", "Tell me more."];
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
+    let responseType = 'neutral';
+    if (userMessage.toLowerCase().includes('good') || userMessage.toLowerCase().includes('great')) {
+        responseType = 'positive';
+    } else if (userMessage.toLowerCase().includes('bad') || userMessage.toLowerCase().includes('sad')) {
+        responseType = 'negative';
+    }
 
-// Default route to serve index.html
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Start server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+    let selectedResponse;
