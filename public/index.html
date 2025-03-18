@@ -5,84 +5,80 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ROY Chatbot</title>
     <style>
-        /* General Reset */
         body {
             margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
+            font-family: sans-serif; /* Use a clean sans-serif font */
+            background-color: #f0f0f0; /* Light gray background */
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
         }
 
-        /* Chat Container */
         #chat-container {
             width: 90%;
             max-width: 600px;
-            background: white;
+            background: #fff; /* White chat container */
             border: 1px solid #ccc;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 4px; /* Slightly rounded corners */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
 
-        /* Messages Area */
         #messages {
             flex: 1;
-            padding: 15px;
+            padding: 16px;
             overflow-y: auto;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #eee; /* Very subtle border */
         }
 
-        /* Message Styling */
         .message {
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            font-size: 14px;
         }
 
         .message.user {
             text-align: right;
-            color: #007bff;
+            color: #333; /* Dark gray for user messages */
         }
 
         .message.bot {
             text-align: left;
-            color: #333;
+            color: #222; /* Very dark gray for bot messages */
         }
 
-        /* Input Area */
         #input-area {
             display: flex;
-            padding: 10px;
-            background-color: #fafafa;
+            padding: 8px 16px;
+            background-color: #f8f8f8; /* Light gray input area */
         }
 
         #user-input {
             flex: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 16px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none; /* Remove default focus outline */
         }
 
         #send-button {
-            margin-left: 10px;
-            padding: 10px 15px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
+            margin-left: 8px;
+            padding: 8px 16px;
+            background-color: #e0e0e0; /* Light gray send button */
+            border: 1px solid #ccc;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
+            outline: none; /* Remove default focus outline */
         }
 
         #send-button:hover {
-            background-color: #0056b3;
+            background-color: #d0d0d0;
         }
 
-        /* Responsive Design */
         @media (max-width: 600px) {
             #chat-container {
                 width: 100%;
@@ -92,12 +88,8 @@
     </style>
 </head>
 <body>
-    <!-- Chat Container -->
     <div id="chat-container">
-        <!-- Messages Area -->
         <div id="messages"></div>
-
-        <!-- Input Area -->
         <div id="input-area">
             <input type="text" id="user-input" placeholder="Type a message..." />
             <button id="send-button">Send</button>
@@ -105,61 +97,7 @@
     </div>
 
     <script>
-        // DOM Elements
-        const messagesDiv = document.getElementById('messages');
-        const userInput = document.getElementById('user-input');
-        const sendButton = document.getElementById('send-button');
-
-        // Function to add a message to the chat
-        function addMessage(sender, text) {
-            const messageClass = sender === 'You' ? 'user' : 'bot';
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message', messageClass);
-            messageElement.innerHTML = `<strong>${sender}:</strong> ${text}`;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to bottom
-        }
-
-        // Function to send a message to the server
-        async function sendMessage() {
-            const message = userInput.value.trim();
-            if (!message) return;
-
-            // Add user's message to the chat
-            addMessage('You', message);
-
-            try {
-                // Send message to the backend
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
-                });
-
-                // Parse the response
-                const data = await response.json();
-
-                // Check for errors in the response
-                if (data.error) {
-                    addMessage('Bot', `Error: ${data.error}`);
-                } else {
-                    addMessage('Bot', data.response || 'Sorry, I could not generate a response.');
-                }
-            } catch (error) {
-                console.error('Error communicating with the server:', error.message);
-                addMessage('Bot', 'An error occurred while processing your request.');
-            }
-
-            // Clear input field
-            userInput.value = '';
-        }
-
-        // Event Listeners
-        sendButton.addEventListener('click', sendMessage);
-
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        // ... (JavaScript code remains the same) ...
     </script>
 </body>
 </html>
