@@ -2,7 +2,7 @@
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background-color: #f4f4f9;
+    background-color: #4b4b5e;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -41,16 +41,16 @@ body {
 /* User Messages */
 .message.user {
     text-align: right;
-    color: black; /* Black font for user messages */
-    background-color: #f0f0f0; /* Light gray background */
+    color: white; /* Black font for user messages */
+    background-color: #fcfcfc; /* Light gray background */
     align-self: flex-end; /* Align user messages to the right */
 }
 
 /* Roy's Responses */
 .message.bot {
     text-align: left;
-    color: red; /* Red font for Roy's messages */
-    background-color: #e6f3ff; /* Light blue background */
+    color: yellow; /* Red font for Roy's messages */
+    background-color: #92ab2c; /* Light blue background */
     align-self: flex-start; /* Align Roy's messages to the left */
 }
 
@@ -73,7 +73,7 @@ body {
 #send-button {
     margin-left: 10px;
     padding: 10px 15px;
-    background-color: #007bff;
+    background-color: #00000a;
     color: white;
     border: none;
     border-radius: 5px;
