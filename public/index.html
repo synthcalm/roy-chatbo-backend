@@ -3,163 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROY Chatbot</title>
+    <title>ROY Chat</title>
     <style>
-        /* General Reset */
         body {
-            margin: 0;
             font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
+            background-color: #f5f5f5;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            height: 100vh;
+            margin: 0;
         }
-
-        /* Chat Container */
-        #chat-container {
-            width: 90%;
-            max-width: 600px;
-            background: white;
-            border: 1px solid #ccc;
+        .chat-container {
+            width: 400px;
+            max-width: 90%;
+            background-color: white;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             overflow: hidden;
         }
-
-        /* Messages Area */
-        #messages {
-            flex: 1;
-            padding: 15px;
+        .chat-box {
+            padding: 20px;
+            max-height: 400px;
             overflow-y: auto;
-            border-bottom: 1px solid #ddd;
         }
-
-        /* Message Styling */
         .message {
             margin-bottom: 10px;
         }
-
-        .message.user {
+        .user-message {
             text-align: right;
-            color: #007bff;
         }
-
-        .message.bot {
+        .user-message span {
+            background-color: #007bff;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .roy-message {
             text-align: left;
-            color: #333;
         }
-
-        /* Input Area */
-        #input-area {
+        .roy-message span {
+            background-color: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .input-container {
             display: flex;
             padding: 10px;
-            background-color: #fafafa;
+            border-top: 1px solid #ddd;
         }
-
-        #user-input {
+        input[type="text"] {
             flex: 1;
             padding: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #ddd;
             border-radius: 5px;
-            font-size: 16px;
+            margin-right: 10px;
         }
-
-        #send-button {
-            margin-left: 10px;
-            padding: 10px 15px;
+        button {
+            padding: 10px 20px;
             background-color: #007bff;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 16px;
         }
-
-        #send-button:hover {
+        button:hover {
             background-color: #0056b3;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 600px) {
-            #chat-container {
-                width: 100%;
-                border-radius: 0;
-            }
         }
     </style>
 </head>
 <body>
-    <!-- Chat Container -->
-    <div id="chat-container">
-        <!-- Messages Area -->
-        <div id="messages"></div>
-
-        <!-- Input Area -->
-        <div id="input-area">
-            <input type="text" id="user-input" placeholder="Type a message..." />
-            <button id="send-button">Send</button>
+    <div class="chat-container">
+        <div class="chat-box" id="chatBox"></div>
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()">Send</button>
         </div>
     </div>
 
     <script>
-        // DOM Elements
-        const messagesDiv = document.getElementById('messages');
-        const userInput = document.getElementById('user-input');
-        const sendButton = document.getElementById('send-button');
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        let userId = 'user-' + Date.now();
+        let userName = null;
 
-        // Function to add a message to the chat
-        function addMessage(sender, text) {
-            const messageClass = sender === 'You' ? 'user' : 'bot';
-            const messageElement = document.createElement('div');
-            messageElement.classList.add('message', messageClass);
-            messageElement.innerHTML = `<strong>${sender}:</strong> ${text}`;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to bottom
+        function addMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(sender === 'user' ? 'user-message' : 'roy-message');
+            
+            const senderLabel = sender === 'user' ? (userName || 'You') : 'ROY'; // Label the bot as ROY
+            messageDiv.innerHTML = `<strong>${senderLabel}:</strong> <span>${message}</span>`;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // Function to send a message to the server
         async function sendMessage() {
-            const message = userInput.value.trim();
+            const message = messageInput.value.trim();
             if (!message) return;
 
-            // Add user's message to the chat
-            addMessage('You', message);
+            addMessage('user', message);
+            messageInput.value = '';
 
             try {
-                // Send message to the backend
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({
+                        userId,
+                        userName,
+                        preferredName: userName,
+                        message
+                    })
                 });
-
-                // Parse the response
                 const data = await response.json();
 
-                // Check for errors in the response
-                if (data.error) {
-                    addMessage('Bot', `Error: ${data.error}`);
-                } else {
-                    addMessage('Bot', data.response || 'Sorry, I could not generate a response.');
+                if (data.sessionInfo.userName && !userName) {
+                    userName = data.sessionInfo.userName;
+                    const userMessages = document.querySelectorAll('.user-message strong');
+                    userMessages.forEach(msg => {
+                        if (msg.textContent === 'You:') {
+                            msg.textContent = `${userName}:`;
+                        }
+                    });
                 }
-            } catch (error) {
-                console.error('Error communicating with the server:', error.message);
-                addMessage('Bot', 'An error occurred while processing your request.');
-            }
 
-            // Clear input field
-            userInput.value = '';
+                addMessage('roy', data.response);
+            } catch (error) {
+                addMessage('roy', 'Sorry, something went wrong. Let’s try again.');
+            }
         }
 
-        // Event Listeners
-        sendButton.addEventListener('click', sendMessage);
-
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        // Auto-send initial message to trigger ROY's greeting
+        (async () => {
+            await sendMessage('Hello');
+        })();
     </script>
 </body>
 </html>
