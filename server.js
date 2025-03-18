@@ -148,9 +148,9 @@ app.post('/api/chat', async (req, res) => {
         return res.status(503).json({ response: "I'm having connection issues. Please try again later." });
     }
 
-    if (!anthropic.messages) {
-        console.error('Anthropic messages API not available');
-        return res.status(503).json({ response: "My messaging service is down. Please try again later." });
+    if (!anthropic.messages || typeof anthropic.messages.create !== 'function') {
+        console.error('Anthropic messages API not available or incompatible');
+        return res.status(503).json({ response: "My messaging service is down. Please try again later or contact support." });
     }
 
     const { userId, userName, preferredName, message } = req.body;
@@ -190,13 +190,19 @@ app.post('/api/chat', async (req, res) => {
         const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
 
         console.log('Calling Anthropic API with prompt:', systemPrompt);
-        const apiResponse = await anthropic.messages.create({
-            model: 'claude-3-sonnet-20240229',
-            max_tokens: 500,
-            temperature: 0.7,
-            system: systemPrompt,
-            messages: convo.history
-        });
+        let apiResponse;
+        try {
+            apiResponse = await anthropic.messages.create({
+                model: 'claude-3-5-sonnet-20241022', // Updated to a plausible current model
+                max_tokens: 500,
+                temperature: 0.7,
+                system: systemPrompt,
+                messages: convo.history
+            });
+        } catch (apiError) {
+            console.error('Anthropic API error:', apiError.message);
+            return res.status(500).json({ response: "Sorry, I can't process your request right now. Try again later." });
+        }
 
         const rawResponse = apiResponse?.content?.[0]?.text || '';
         const royResponse = processResponse(rawResponse, message);
