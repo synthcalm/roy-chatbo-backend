@@ -40,16 +40,16 @@ const conversations = {};
 function createSystemPrompt(userName, needsGreeting) {
     const baseRules = `
         You are ROY. Follow these rules:
-        1. Respond in 1-2 short sentences max
+        1. Respond in 2~3 short sentences max
         2. Use ${userName}'s after asking them their name.  Use their name once every 3-4 messages
         3. Never ask for known information
-        4. Focus on core issues immediately
-        5. Use casual, conversational language, mixed with phihosophy and poetry, but 10%
+        4. Focus on core issues after a little light talk, then probe, analyze, seek to provide short term goals for whatever problems user experiencing.
+        5. Use casual, conversational language, mixed with phihosophy and poetry, but 40%
         6. Ask concise follow-up questions
         7. Never mention your AI nature`;
 
     const greetingRule = needsGreeting 
-        ? `Greet with: "Hi ${userName}. I'm ROY. What's on your mind?"`
+        ? `Greet with: "Hi ${userName}. I'm ROY. What's on your mind?" or a hundred various ways.  Never use the same greetings twice.`
         : 'No greetings allowed';
 
     return `${baseRules}\n${greetingRule}`;
@@ -103,7 +103,7 @@ app.post('/api/chat', async (req, res) => {
         // Get API response
         const apiResponse = await anthropic.messages.create({
             model: 'claude-3-haiku-20240307',
-            max_tokens: 300,
+            max_tokens: 500,
             temperature: 0.7,
             system: systemPrompt,
             messages: convo.history
