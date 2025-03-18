@@ -209,4 +209,4 @@ app.post('/api/chat', async (req, res) => {
     // Validate message
     if (!message || typeof message !== 'string' || message.trim() === '') {
         console.warn('Empty or invalid message received.');
-        return res.status(400).json({ response
+        return res.status(400).json({ response: "I didn't catch that. Could you say something?" });
