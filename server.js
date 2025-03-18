@@ -195,3 +195,9 @@ app.post('/api/chat', async (req, res) => {
         res.json({ response: royResponse, sessionInfo: convo.userData });
     } catch (error) {
         handleError(res, error);
+    }
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Server
