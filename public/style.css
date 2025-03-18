@@ -2,7 +2,7 @@
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background-color: #4b4b5e;
+    background-color: #808080; /* Gray background for the landing page */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -36,22 +36,21 @@ body {
     padding: 10px;
     border-radius: 5px;
     max-width: 80%;
+    background-color: #000000; /* Black background for all message boxes */
 }
 
 /* User Messages */
 .message.user {
     text-align: right;
-    color: white; /* Black font for user messages */
-    background-color: #fcfcfc; /* Light gray background */
+    color: #ffffff; /* White font for user messages */
     align-self: flex-end; /* Align user messages to the right */
 }
 
 /* Roy's Responses */
 .message.bot {
     text-align: left;
-    color: yellow; /* Red font for Roy's messages */
-    background-color: #92ab2c; /* Light blue background */
-    align-self: flex-start; /* Align Roy's messages to the left */
+    color: #00ff00; /* Green font for bot's messages */
+    align-self: flex-start; /* Align bot's messages to the left */
 }
 
 /* Input Area */
@@ -68,12 +67,14 @@ body {
     border: 1px solid #ccc;
     border-radius: 5px;
     font-size: 16px;
+    background-color: #000000; /* Black background for the "Type a message" box */
+    color: #ffffff; /* White text to ensure readability on black background */
 }
 
 #send-button {
     margin-left: 10px;
     padding: 10px 15px;
-    background-color: #00000a;
+    background-color: #ff0000; /* Red background for the send button */
     color: white;
     border: none;
     border-radius: 5px;
@@ -82,7 +83,7 @@ body {
 }
 
 #send-button:hover {
-    background-color: #0056b3; /* Darker blue on hover */
+    background-color: #cc0000; /* Slightly darker red on hover */
 }
 
 /* Media Query for Smaller Screens */
