@@ -57,10 +57,50 @@ try {
 // Store conversation data
 const conversations = {};
 
-// [Previous functions remain unchanged: createSystemPrompt, processResponse, handleError, 
-// getFallbackResponse, callAnthropicMessages, callAnthropicCompletions]
+// ========== Utility Functions ==========
+function createSystemPrompt(userId, userData) {
+    return `You are ROY, an empathetic AI assistant. User ID: ${userId}. 
+        ${userData.isNewUser ? 'This is a new user.' : 'Returning user.'}
+        Name: ${userData.name}, Preferred Name: ${userData.preferredName}. 
+        Be friendly and maintain context across sessions.`;
+}
 
-// API endpoint for chat
+function processResponse(rawResponse, userMessage) {
+    if (rawResponse.content && Array.isArray(rawResponse.content)) {
+        return rawResponse.content[0].text;
+    }
+    if (rawResponse.completion) {
+        return rawResponse.completion.trim();
+    }
+    return "Hmm, I'm not sure how to respond to that. Could you rephrase?";
+}
+
+async function callAnthropicMessages(systemPrompt, messages) {
+    return anthropic.messages.create({
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: messages
+    });
+}
+
+async function callAnthropicCompletions(prompt) {
+    return anthropic.completions.create({
+        model: 'claude-2',
+        max_tokens_to_sample: 1000,
+        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`
+    });
+}
+
+function handleError(res, error) {
+    console.error('An unexpected error occurred:', error.message);
+    res.status(500).json({
+        response: "Something went wrong on my end. Let’s try again.",
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+}
+
+// ========== API Endpoints ==========
 app.post('/api/chat', async (req, res) => {
     if (!anthropic) {
         console.error('Anthropic client not initialized.');
