@@ -194,4 +194,4 @@ app.post('/api/chat', async (req, res) => {
 
         res.json({ response: royResponse, sessionInfo: convo.userData });
     } catch (error) {
-        handleError(res
+        handleError(res, error);
