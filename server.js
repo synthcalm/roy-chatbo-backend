@@ -89,7 +89,7 @@ function createSystemPrompt(userId, userData) {
     - Long-term: Foster resilience and independence.`;
 
     const greetingRule = isNewUser
-        ? `Begin with a warm yet neutral greeting. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
+        ? `Begin with a warm yet neutral greeting. Example: "Hello. I'm Roy, here to assist you. May I have your name, please?"`
         : `Continue the conversation naturally, avoiding assumptions about the user's emotional state unless explicitly mentioned.`;
 
     return `${baseRules}\n${greetingRule}`;
@@ -122,7 +122,7 @@ function processResponse(rawText, userMessage) {
     processedResponse = processedResponse.substring(0, maxLength);
 
     if (maxLength === 160 && processedResponse.length >= 140) {
-        processedResponse = processedResponse.substring(0, 110) + '. Ask for more if needed.';
+        processedResponse = processedResponse.substring(0, 110) + '. Ask if you’d like me to elaborate.';
     }
 
     return processedResponse;
@@ -149,7 +149,7 @@ function handleError(res, error) {
 function getFallbackResponse(message) {
     const isNeutralGreeting = ['hello', 'hi', 'hey'].includes(message.toLowerCase().trim());
     return isNeutralGreeting
-        ? "Hello! I’m ROY, here to assist you. May I have your name, please?"
+        ? "Hello. I’m Roy, here to assist you. May I have your name, please?"
         : "I’m having trouble processing your request. Let’s try again.";
 }
 
