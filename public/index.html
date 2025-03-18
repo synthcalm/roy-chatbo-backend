@@ -7,8 +7,8 @@
     <style>
         body {
             margin: 0;
-            font-family: sans-serif; /* Use a clean sans-serif font */
-            background-color: #f0f0f0; /* Light gray background */
+            font-family: sans-serif;
+            background-color: #f0f0f0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -18,9 +18,9 @@
         #chat-container {
             width: 90%;
             max-width: 600px;
-            background: #fff; /* White chat container */
+            background: #fff;
             border: 1px solid #ccc;
-            border-radius: 4px; /* Slightly rounded corners */
+            border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
@@ -31,7 +31,7 @@
             flex: 1;
             padding: 16px;
             overflow-y: auto;
-            border-bottom: 1px solid #eee; /* Very subtle border */
+            border-bottom: 1px solid #eee;
         }
 
         .message {
@@ -41,18 +41,18 @@
 
         .message.user {
             text-align: right;
-            color: #333; /* Dark gray for user messages */
+            color: #333;
         }
 
         .message.bot {
             text-align: left;
-            color: #222; /* Very dark gray for bot messages */
+            color: #222;
         }
 
         #input-area {
             display: flex;
             padding: 8px 16px;
-            background-color: #f8f8f8; /* Light gray input area */
+            background-color: #f8f8f8;
         }
 
         #user-input {
@@ -61,18 +61,18 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
-            outline: none; /* Remove default focus outline */
+            outline: none;
         }
 
         #send-button {
             margin-left: 8px;
             padding: 8px 16px;
-            background-color: #e0e0e0; /* Light gray send button */
+            background-color: #e0e0e0;
             border: 1px solid #ccc;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            outline: none; /* Remove default focus outline */
+            outline: none;
         }
 
         #send-button:hover {
@@ -97,7 +97,52 @@
     </div>
 
     <script>
-        // ... (JavaScript code remains the same) ...
+        const messagesDiv = document.getElementById('messages');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        // Replace with your Render service URL
+        const apiUrl = 'https://your-render-service.onrender.com/api/chat';
+
+        function addMessage(text, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+            messageDiv.textContent = text;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to latest message
+        }
+
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessage(message, true); // Display user's message
+            userInput.value = '';
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Server response:', data);
+                addMessage(data.response || 'No response from bot');
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                addMessage('Error: Could not connect to server');
+            });
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
     </script>
 </body>
 </html>
