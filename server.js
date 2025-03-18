@@ -5,20 +5,23 @@ const { Anthropic } = require('@anthropic-ai/sdk');
 const bodyParser = require('body-parser');
 const path = require('path');
 
+// Load environment variables
 dotenv.config();
 
-console.log('Starting ROY Chatbot Backend...');
+console.log('Initializing ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
 
-// Check API key first
+// Validate API key early
 if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is missing! Please set it in Render environment variables.');
+    console.error('ANTHROPIC_API_KEY is missing! Please set it in your environment variables.');
     process.exit(1);
 }
-console.log('API Key loaded successfully');
+console.log('API Key loaded successfully.');
 
+// Initialize Express app
 const app = express();
-// Allow more flexible CORS settings
+
+// Configure CORS for flexible origins
 app.use(cors({
     origin: [
         'https://roy-chatbo-backend.onrender.com',
@@ -28,6 +31,8 @@ app.use(cors({
     methods: ['GET', 'POST'],
     credentials: true
 }));
+
+// Middleware to parse JSON requests
 app.use(bodyParser.json());
 
 // Initialize Anthropic client
@@ -36,15 +41,15 @@ try {
     anthropic = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY
     });
-    console.log('Anthropic client initialized successfully');
-    
-    // Check if the messages method is available
-    if (!anthropic.messages && anthropic.completions) {
-        console.log('Using older Anthropic SDK with completions API');
-    } else if (anthropic.messages) {
-        console.log('Using newer Anthropic SDK with messages API');
+    console.log('Anthropic client initialized successfully.');
+
+    // Log API compatibility
+    if (anthropic.messages) {
+        console.log('Using newer Anthropic SDK with messages API.');
+    } else if (anthropic.completions) {
+        console.log('Using older Anthropic SDK with completions API.');
     } else {
-        console.error('Anthropic SDK has neither messages nor completions API');
+        console.error('Anthropic SDK has neither messages nor completions API.');
     }
 } catch (error) {
     console.error('Anthropic client initialization failed:', error.message);
@@ -54,101 +59,67 @@ try {
 // Store conversation data
 const conversations = {};
 
-// Create system prompt based on user data
+/**
+ * Creates a system prompt tailored to the user's context.
+ * @param {string} userId - Unique identifier for the user.
+ * @param {Object} userData - User-specific data.
+ * @returns {string} - System prompt for the AI model.
+ */
 function createSystemPrompt(userId, userData) {
     const { name, preferredName, isNewUser, sessionDuration } = userData;
     const timeRemaining = sessionDuration ? Math.max(0, 60 - sessionDuration) : 60;
 
     const baseRules = `
-    You are ROY, a versatile chatbot with expertise in therapy, geopolitics, finance, crypto, AI, career transition, and medication knowledge.
-
+    You are ROY, a guide blending therapeutic wisdom with expertise in finance, AI, geopolitics, and more.
     # Core Identity
-    - You are ROY, a multifaceted guide blending therapeutic wisdom with expertise in various domains.
-    - Combine the therapeutic insights of a CBT therapist with the analytical rigor of a financial analyst, the technical expertise of an AI researcher, the career guidance of a transition coach, and the medication knowledge of a pharmacist.
-    - Provide balanced perspectives, integrating therapeutic support with practical advice in finance, technology, career, and health.
-
-    # Knowledge Base
-    - Expert in CBT and modern therapeutic methodologies
-    - Fluent in DSM diagnostic criteria and applications
-    - Deep understanding of global finance, investment strategies, and cryptocurrency markets
-    - Advanced knowledge of AI technologies, machine learning, and their applications
-    - Expertise in career transition strategies, job market trends, and professional development
-    - Comprehensive knowledge of medications, their uses, side effects, and interactions (within ethical limitations)
-    - Well-versed in geopolitics, UN resolutions, and international law
-    - Knowledgeable about religious and philosophical traditions
-    - Understanding of Eastern and Western wellness approaches
-    - Insights on common stressors: finances, relationships, trauma, career uncertainty, family dysfunction, and health concerns
-
+    - A multifaceted assistant offering both empathy and practical advice.
+    - Fluent in CBT, finance, AI, career transitions, medication knowledge, and global affairs.
+    - Adapt communication style to the user's needs, balancing warmth with clarity.
     # Communication Style
-    - Adapt communication to the user's needs, providing empathetic support and expert advice.
-    - Offer therapeutic guidance using CBT principles only when explicitly requested (e.g., user mentions "help me feel better" or "CBT").
-    - Deliver financial insights with analytical precision.
-    - Explain AI concepts with technical clarity.
-    - Provide career guidance with practical strategies.
-    - Discuss medication knowledge with accuracy and caution.
-    - Use a balanced approach, integrating therapeutic support with expert advice.
-    - Default to concise responses (2-3 sentences, max 160 characters), but expand for complex topics or user requests (max 500 characters).
-
+    - Default to concise responses (2-3 sentences, max 160 characters).
+    - Expand for complex topics or when explicitly requested (max 500 characters).
+    - Use names naturally but sparingly.
     # Session Management
-    - Current session time remaining: ${timeRemaining} minutes
-    - Suggest wellness breaks for sessions longer than 30 minutes.
-    - Provide appropriate resources for crisis situations (e.g., if user mentions "suicide").
-    - Personalize suggestions based on user history, but do not assume emotional states unless explicitly stated.
-
+    - Current session time remaining: ${timeRemaining} minutes.
+    - Suggest breaks for sessions over 30 minutes.
+    - Provide resources for crisis situations (e.g., suicide).
     # CBT Framework
-    - Short-term: Build rapport, assess problems, establish cognitive-behavioral model.
-    - Mid-term: Challenge negative thoughts, implement behavioral techniques, address specific symptoms.
-    - Long-term: Modify core beliefs, build resilience, transfer skills, foster independence.
-
-    # Name Usage Guidelines
-    - Ask for the user's name in your first response if unknown.
-    - Address the user by their preferred name once known.
-    - Use their name naturally throughout the conversation, but not excessively.
-    `;
+    - Short-term: Build rapport, assess problems, establish cognitive-behavioral strategies.
+    - Mid-term: Challenge negative thoughts, implement behavioral techniques.
+    - Long-term: Foster resilience and independence.`;
 
     const greetingRule = isNewUser
-        ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
-        : `Continue the ongoing conversation without making assumptions about the user's emotional state unless explicitly mentioned in their message.`;
+        ? `Begin with a warm yet neutral greeting. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
+        : `Continue the conversation naturally, avoiding assumptions about the user's emotional state unless explicitly mentioned.`;
 
     return `${baseRules}\n${greetingRule}`;
 }
 
-// Process and format the AI response
+/**
+ * Processes and formats the AI response for the user.
+ * @param {string} rawText - Raw response from the AI model.
+ * @param {string} userMessage - The user's input message.
+ * @returns {string} - Processed response.
+ */
 function processResponse(rawText, userMessage) {
-    if (!rawText) return "I didn't catch that. Could you repeat your message?";
+    if (!rawText) return "I didn’t quite catch that. Could you clarify?";
 
     const sentences = rawText.split(/[.!?]/).filter(s => s.trim().length > 0);
     const limitedSentences = sentences.slice(0, 3);
     let processedResponse = limitedSentences.join('. ').trim();
+
     if (!processedResponse.match(/[.!?]$/)) processedResponse += '.';
 
-    const isComplexTopic = 
-        userMessage.toLowerCase().includes('suicide') || 
-        userMessage.toLowerCase().includes('geopolitics') || 
-        userMessage.toLowerCase().includes('conflict') || 
-        userMessage.toLowerCase().includes('war') ||
-        userMessage.toLowerCase().includes('politics');
-    const isUserRequestingMore = 
-        userMessage.toLowerCase().includes('more') || 
-        userMessage.toLowerCase().includes('explain') || 
-        userMessage.toLowerCase().includes('detail');
-    const isCBTGuidanceNeeded = 
-        userMessage.toLowerCase().includes('exercise') || 
-        userMessage.toLowerCase().includes('technique') || 
-        userMessage.toLowerCase().includes('help me') ||
-        userMessage.toLowerCase().includes('feel better');
+    const isComplexTopic = [
+        'suicide', 'geopolitics', 'conflict', 'war', 'politics'
+    ].some(term => userMessage.toLowerCase().includes(term));
 
-    const isNeutralGreeting = 
-        userMessage.toLowerCase().trim() === 'hello' || 
-        userMessage.toLowerCase().trim() === 'hi' || 
-        userMessage.toLowerCase().trim() === 'hey';
+    const isUserRequestingMore = [
+        'more', 'explain', 'detail'
+    ].some(term => userMessage.toLowerCase().includes(term));
 
-    const maxLength = (isComplexTopic || isUserRequestingMore || isCBTGuidanceNeeded) ? 500 : 160;
+    const maxLength = (isComplexTopic || isUserRequestingMore) ? 500 : 160;
     processedResponse = processedResponse.substring(0, maxLength);
-
-    if (isNeutralGreeting && (processedResponse.toLowerCase().includes('fatigue') || processedResponse.toLowerCase().includes('tired') || processedResponse.toLowerCase().includes('draining'))) {
-        processedResponse = "Hello! I'm ROY, here to assist you. May I have your name, please?";
-    }
 
     if (maxLength === 160 && processedResponse.length >= 140) {
         processedResponse = processedResponse.substring(0, 110) + '. Ask for more if needed.';
@@ -157,78 +128,88 @@ function processResponse(rawText, userMessage) {
     return processedResponse;
 }
 
-// Standard error handler
+/**
+ * Handles errors gracefully.
+ * @param {Object} res - Express response object.
+ * @param {Error} error - Error object.
+ */
 function handleError(res, error) {
-    console.error('API Error:', error.message, error.stack);
-    res.status(500).json({ 
-        response: "Something went wrong on my end. Let's try again.",
+    console.error('An unexpected error occurred:', error.message);
+    res.status(500).json({
+        response: "Something went wrong on my end. Let’s try again.",
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
 }
 
-// Helper function to get fallback response
+/**
+ * Provides a fallback response when the AI fails.
+ * @param {string} message - User's input message.
+ * @returns {string} - Fallback response.
+ */
 function getFallbackResponse(message) {
-    const isNeutralGreeting = 
-        message.toLowerCase().trim() === 'hello' || 
-        message.toLowerCase().trim() === 'hi' || 
-        message.toLowerCase().trim() === 'hey';
-    
-    return isNeutralGreeting 
-        ? "Hello! I'm ROY, here to assist you. May I have your name, please?" 
-        : "Sorry, I can't process your request right now. Try again later.";
+    const isNeutralGreeting = ['hello', 'hi', 'hey'].includes(message.toLowerCase().trim());
+    return isNeutralGreeting
+        ? "Hello! I’m ROY, here to assist you. May I have your name, please?"
+        : "I’m having trouble processing your request. Let’s try again.";
 }
 
-// Call Anthropic API using completions API (for older SDK versions)
-async function callAnthropicCompletions(prompt, maxTokens = 500) {
-    try {
-        const response = await anthropic.completions.create({
-            model: 'claude-3-5-sonnet-20241022',
-            prompt: prompt,
-            max_tokens_to_sample: maxTokens,
-            temperature: 0.7
-        });
-        return response.completion;
-    } catch (error) {
-        console.error('Anthropic completions API error:', error.message);
-        throw error;
-    }
-}
-
-// Call Anthropic API using messages API (for newer SDK versions)
+/**
+ * Calls the Anthropic Messages API.
+ * @param {string} system - System prompt.
+ * @param {Array} messages - Conversation history.
+ * @param {number} maxTokens - Maximum tokens for the response.
+ * @returns {Promise<string>} - AI-generated response.
+ */
 async function callAnthropicMessages(system, messages, maxTokens = 500) {
     try {
         const response = await anthropic.messages.create({
             model: 'claude-3-5-sonnet-20241022',
-            system: system,
-            messages: messages,
+            system,
+            messages,
             max_tokens: maxTokens,
             temperature: 0.7
         });
         return response.content[0].text;
     } catch (error) {
-        console.error('Anthropic messages API error:', error.message);
+        console.error('Anthropic Messages API error:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Calls the Anthropic Completions API.
+ * @param {string} prompt - Prompt for the AI model.
+ * @param {number} maxTokens - Maximum tokens for the response.
+ * @returns {Promise<string>} - AI-generated response.
+ */
+async function callAnthropicCompletions(prompt, maxTokens = 500) {
+    try {
+        const response = await anthropic.completions.create({
+            model: 'claude-3-5-sonnet-20241022',
+            prompt,
+            max_tokens_to_sample: maxTokens,
+            temperature: 0.7
+        });
+        return response.completion;
+    } catch (error) {
+        console.error('Anthropic Completions API error:', error.message);
         throw error;
     }
 }
 
 // API endpoint for chat
 app.post('/api/chat', async (req, res) => {
-    // Check if Anthropic client is available
     if (!anthropic) {
-        console.error('Anthropic client not initialized');
-        return res.status(503).json({ 
-            response: "I'm having connection issues. Please try again later." 
-        });
+        console.error('Anthropic client not initialized.');
+        return res.status(503).json({ response: "I’m currently unavailable. Please try again later." });
     }
 
     const { userId, userName, preferredName, message } = req.body;
-    
+
     // Validate message
     if (!message || typeof message !== 'string' || message.trim() === '') {
-        console.warn('Empty or invalid message received');
-        return res.status(400).json({ 
-            response: "I didn't catch that. Could you say something?" 
-        });
+        console.warn('Empty or invalid message received.');
+        return res.status(400).json({ response: "I didn’t catch that. Could you say something?" });
     }
 
     const userIdentifier = userId || userName || 'anonymous';
@@ -262,43 +243,24 @@ app.post('/api/chat', async (req, res) => {
 
         const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
 
-        console.log(`Processing message from user: ${userIdentifier}`);
-        
         // Call Anthropic API based on SDK version
         let rawResponse;
         try {
-            if (anthropic.messages && typeof anthropic.messages.create === 'function') {
-                // Using newer Messages API
-                rawResponse = await callAnthropicMessages(
-                    systemPrompt,
-                    convo.history,
-                    500
-                );
-            } else if (anthropic.completions && typeof anthropic.completions.create === 'function') {
-                // Using older Completions API
-                // Format conversation for completions API
-                let prompt = `${systemPrompt}\n\n`;
-                
+            if (anthropic.messages) {
+                rawResponse = await callAnthropicMessages(systemPrompt, convo.history, 500);
+            } else if (anthropic.completions) {
+                let prompt = `${systemPrompt}\n`;
                 for (const msg of convo.history) {
-                    if (msg.role === 'user') {
-                        prompt += `\nHuman: ${msg.content}`;
-                    } else if (msg.role === 'assistant') {
-                        prompt += `\nAssistant: ${msg.content}`;
-                    }
+                    prompt += msg.role === 'user' ? `\nHuman: ${msg.content}` : `\nAssistant: ${msg.content}`;
                 }
-                
                 prompt += '\nAssistant:';
                 rawResponse = await callAnthropicCompletions(prompt, 500);
             } else {
-                throw new Error('Neither messages nor completions API is available');
+                throw new Error('Neither messages nor completions API is available.');
             }
-            
-            console.log('Anthropic API call successful');
         } catch (apiError) {
             console.error('Anthropic API error:', apiError.message);
-            return res.json({ 
-                response: getFallbackResponse(message) 
-            });
+            return res.json({ response: getFallbackResponse(message) });
         }
 
         // Process the response
@@ -313,10 +275,7 @@ app.post('/api/chat', async (req, res) => {
             convo.history = convo.history.slice(-10);
         }
 
-        res.json({ 
-            response: royResponse, 
-            sessionInfo: convo.userData 
-        });
+        res.json({ response: royResponse, sessionInfo: convo.userData });
     } catch (error) {
         handleError(res, error);
     }
@@ -324,7 +283,7 @@ app.post('/api/chat', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
+    res.status(200).json({
         status: 'OK',
         timestamp: new Date().toISOString(),
         anthropicClientAvailable: !!anthropic,
@@ -332,7 +291,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Serve static files from public directory
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Default route to serve index.html
@@ -340,8 +299,8 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
+// Start the server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`ROY Chatbot Backend is running on port ${PORT}.`);
 });
