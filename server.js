@@ -114,7 +114,7 @@ function createSystemPrompt(userId, userData) {
         ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm Roy, here to assist you. May I have your name, please?"`
         : `Continue the ongoing conversation without making assumptions about the user's emotional state unless explicitly mentioned in their message.`;
 
-    return `${baseRules}\n${greetingRule}`;
+    return `<span class="math-inline">\{baseRules\}\\n</span>{greetingRule}`;
 }
 
 // Process and format the AI response
@@ -172,17 +172,4 @@ function processResponse(rawText, userMessage, userId) {
     const negativeResponses = ["I'm sorry to hear that.", "That sounds tough.", "Oh no, that's unfortunate."];
     const neutralResponses = ["I see.", "Interesting.", "Tell me more."];
 
-    let responseType = 'neutral';  // Fixed comment syntax
-
-    return processedResponse;
-}
-
-// Add your routes here (make sure to add these)
-app.post('/chat', async (req, res) => {
-    // Add your chat endpoint logic
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+    let responseType = 'neutral';
