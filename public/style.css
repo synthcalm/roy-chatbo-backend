@@ -33,16 +33,25 @@ body {
 .message {
     margin-bottom: 10px;
     word-wrap: break-word; /* Ensure long words don't overflow */
+    padding: 10px;
+    border-radius: 5px;
+    max-width: 80%;
 }
 
+/* User Messages */
 .message.user {
     text-align: right;
-    color: #007bff; /* Blue for user messages */
+    color: black; /* Black font for user messages */
+    background-color: #f0f0f0; /* Light gray background */
+    align-self: flex-end; /* Align user messages to the right */
 }
 
+/* Roy's Responses */
 .message.bot {
     text-align: left;
-    color: #333; /* Dark gray for bot messages */
+    color: red; /* Red font for Roy's messages */
+    background-color: #e6f3ff; /* Light blue background */
+    align-self: flex-start; /* Align Roy's messages to the left */
 }
 
 /* Input Area */
