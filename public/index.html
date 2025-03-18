@@ -97,52 +97,61 @@
     </div>
 
     <script>
-        const messagesDiv = document.getElementById('messages');
-        const userInput = document.getElementById('user-input');
-        const sendButton = document.getElementById('send-button');
+        window.onload = function() {
+            console.log('Script loaded successfully');
+            const messagesDiv = document.getElementById('messages');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
 
-        // Replace with your Render service URL
-        const apiUrl = 'https://your-render-service.onrender.com/api/chat';
+            if (!messagesDiv || !userInput || !sendButton) {
+                console.error('One or more DOM elements not found:', { messagesDiv, userInput, sendButton });
+                return;
+            }
 
-        function addMessage(text, isUser = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
-            messageDiv.textContent = text;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to latest message
-        }
+            // Replace with your Render service URL
+            const apiUrl = 'https://roy-chatbo-backend.onrender.com/api/chat'; // Update this URL
 
-        function sendMessage() {
-            const message = userInput.value.trim();
-            if (!message) return;
+            function addMessage(text, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
+                messageDiv.textContent = text;
+                messagesDiv.appendChild(messageDiv);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
 
-            addMessage(message, true); // Display user's message
-            userInput.value = '';
+            function sendMessage() {
+                const message = userInput.value.trim();
+                if (!message) return;
 
-            fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message })
-            })
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                return response.json();
-            })
-            .then(data => {
-                console.log('Server response:', data);
-                addMessage(data.response || 'No response from bot');
-            })
-            .catch(error => {
-                console.error('Fetch error:', error);
-                addMessage('Error: Could not connect to server');
+                console.log('Sending message:', message);
+                addMessage(message, true);
+                userInput.value = '';
+
+                fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                })
+                .then(response => {
+                    console.log('Fetch response status:', response.status);
+                    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Server response:', data);
+                    addMessage(data.response || 'No response from bot');
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    addMessage('Error: Could not connect to server');
+                });
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+            userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
             });
-        }
-
-        // Event listeners
-        sendButton.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        };
     </script>
 </body>
 </html>
