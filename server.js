@@ -9,8 +9,8 @@ dotenv.config();
 
 console.log('Starting ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
-console.log('Anthropic SDK Version:', Anthropic?.VERSION || 'unknown');
 
+// Check API key first
 if (!process.env.ANTHROPIC_API_KEY) {
     console.error('ANTHROPIC_API_KEY is missing! Please set it in Render environment variables.');
     process.exit(1);
@@ -18,21 +18,34 @@ if (!process.env.ANTHROPIC_API_KEY) {
 console.log('API Key loaded successfully');
 
 const app = express();
-app.use(cors({ origin: 'https://roy-chatbo-backend.onrender.com' })); // Explicitly allow the client origin
+// Allow more flexible CORS settings
+app.use(cors({
+    origin: [
+        'https://roy-chatbo-backend.onrender.com',
+        'https://roy-chatbot.onrender.com',
+        process.env.FRONTEND_URL
+    ].filter(Boolean),
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
 app.use(bodyParser.json());
 
+// Initialize Anthropic client
 let anthropic;
 try {
-    anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY
+    });
     console.log('Anthropic client initialized successfully');
-    console.log('Anthropic messages property:', anthropic?.messages ? 'Available' : 'Not available');
 } catch (error) {
     console.error('Anthropic client initialization failed:', error.message);
     anthropic = null;
 }
 
+// Store conversation data
 const conversations = {};
 
+// Create system prompt based on user data
 function createSystemPrompt(userId, userData) {
     const { name, preferredName, isNewUser, sessionDuration } = userData;
     const timeRemaining = sessionDuration ? Math.max(0, 60 - sessionDuration) : 60;
@@ -91,6 +104,7 @@ function createSystemPrompt(userId, userData) {
     return `${baseRules}\n${greetingRule}`;
 }
 
+// Process and format the AI response
 function processResponse(rawText, userMessage) {
     if (!rawText) return "I didn't catch that. Could you repeat your message?";
 
@@ -134,6 +148,7 @@ function processResponse(rawText, userMessage) {
     return processedResponse;
 }
 
+// Standard error handler
 function handleError(res, error) {
     console.error('API Error:', error.message, error.stack);
     res.status(500).json({ 
@@ -142,29 +157,42 @@ function handleError(res, error) {
     });
 }
 
+// Helper function to get fallback response
+function getFallbackResponse(message) {
+    const isNeutralGreeting = 
+        message.toLowerCase().trim() === 'hello' || 
+        message.toLowerCase().trim() === 'hi' || 
+        message.toLowerCase().trim() === 'hey';
+    
+    return isNeutralGreeting 
+        ? "Hello! I'm ROY, here to assist you. May I have your name, please?" 
+        : "Sorry, I can't process your request right now. Try again later.";
+}
+
+// API endpoint for chat
 app.post('/api/chat', async (req, res) => {
+    // Check if Anthropic client is available
     if (!anthropic) {
         console.error('Anthropic client not initialized');
-        return res.status(503).json({ response: "I'm having connection issues. Please try again later." });
-    }
-
-    if (!anthropic.messages || typeof anthropic.messages.create !== 'function') {
-        console.error('Anthropic messages API not available or incompatible. Using fallback response.');
-        const { message } = req.body;
-        const isNeutralGreeting = message.toLowerCase().trim() === 'hello' || message.toLowerCase().trim() === 'hi' || message.toLowerCase().trim() === 'hey';
-        const fallbackResponse = isNeutralGreeting ? "Hello! I'm ROY, here to assist you. May I have your name, please?" : "Sorry, I can't process your request right now. Try again later.";
-        return res.json({ response: fallbackResponse });
+        return res.status(503).json({ 
+            response: "I'm having connection issues. Please try again later." 
+        });
     }
 
     const { userId, userName, preferredName, message } = req.body;
-    if (!message) {
-        console.warn('Empty message received');
-        return res.status(400).json({ response: "I didn't catch that. Could you say something?" });
+    
+    // Validate message
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+        console.warn('Empty or invalid message received');
+        return res.status(400).json({ 
+            response: "I didn't catch that. Could you say something?" 
+        });
     }
 
     const userIdentifier = userId || userName || 'anonymous';
 
     try {
+        // Initialize or update conversation data
         if (!conversations[userIdentifier]) {
             conversations[userIdentifier] = {
                 history: [],
@@ -192,7 +220,9 @@ app.post('/api/chat', async (req, res) => {
 
         const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
 
-        console.log('Calling Anthropic API with prompt:', systemPrompt);
+        console.log(`Processing message from user: ${userIdentifier}`);
+        
+        // Call Anthropic API
         let apiResponse;
         try {
             apiResponse = await anthropic.messages.create({
@@ -202,31 +232,74 @@ app.post('/api/chat', async (req, res) => {
                 system: systemPrompt,
                 messages: convo.history
             });
+            
+            console.log('Anthropic API call successful');
         } catch (apiError) {
             console.error('Anthropic API error:', apiError.message);
-            const isNeutralGreeting = message.toLowerCase().trim() === 'hello' || message.toLowerCase().trim() === 'hi' || message.toLowerCase().trim() === 'hey';
-            const fallbackResponse = isNeutralGreeting ? "Hello! I'm ROY, here to assist you. May I have your name, please?" : "Sorry, I can't process your request right now. Try again later.";
-            return res.json({ response: fallbackResponse });
+            return res.json({ 
+                response: getFallbackResponse(message) 
+            });
         }
 
+        // Process the response
         const rawResponse = apiResponse?.content?.[0]?.text || '';
         const royResponse = processResponse(rawResponse, message);
 
+        // Update conversation history
         convo.history.push({ role: 'assistant', content: royResponse });
         convo.lastInteraction = Date.now();
 
+        // Maintain history size limit
         if (convo.history.length > 10) {
             convo.history = convo.history.slice(-10);
         }
 
-        res.json({ response: royResponse, sessionInfo: convo.userData });
+        // Clean up old conversations every hour
+        const ONE_HOUR = 60 * 60 * 1000;
+        if (Date.now() % ONE_HOUR < 5000) {
+            cleanupOldConversations();
+        }
+
+        res.json({ 
+            response: royResponse, 
+            sessionInfo: convo.userData 
+        });
     } catch (error) {
         handleError(res, error);
     }
 });
 
+// Clean up old conversations to prevent memory leaks
+function cleanupOldConversations() {
+    const now = Date.now();
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    
+    Object.keys(conversations).forEach(userId => {
+        if (now - conversations[userId].lastInteraction > TWO_HOURS) {
+            console.log(`Cleaning up idle conversation for user: ${userId}`);
+            delete conversations[userId];
+        }
+    });
+}
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        anthropicClientAvailable: !!anthropic
+    });
+});
+
+// Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Default route to serve index.html
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
