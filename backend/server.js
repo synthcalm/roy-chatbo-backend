@@ -3,7 +3,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const bodyParser = require('body-parser');
-const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -26,7 +25,8 @@ app.use(cors({
     origin: [
         'https://roy-chatbo-backend.onrender.com',
         'https://roy-chatbot.onrender.com',
-        process.env.FRONTEND_URL
+        process.env.FRONTEND_URL,
+        'https://synthcalm.com' // Added synthcalm.com to allowed origins
     ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true
@@ -92,7 +92,7 @@ function createSystemPrompt(userId, userData) {
         ? `Begin with a warm yet neutral greeting. Example: "Hello. I'm Roy, here to assist you. May I have your name, please?"`
         : `Continue the conversation naturally, avoiding assumptions about the user's emotional state unless explicitly mentioned.`;
 
-    return `${baseRules}\n${greetingRule}`;
+    return `<span class="math-inline">\{baseRules\}\\n</span>{greetingRule}`;
 }
 
 /**
@@ -209,98 +209,4 @@ app.post('/api/chat', async (req, res) => {
     // Validate message
     if (!message || typeof message !== 'string' || message.trim() === '') {
         console.warn('Empty or invalid message received.');
-        return res.status(400).json({ response: "I didn’t catch that. Could you say something?" });
-    }
-
-    const userIdentifier = userId || userName || 'anonymous';
-
-    try {
-        // Initialize or update conversation data
-        if (!conversations[userIdentifier]) {
-            conversations[userIdentifier] = {
-                history: [],
-                userData: {
-                    name: userName || null,
-                    preferredName: preferredName || null,
-                    isNewUser: true,
-                    sessionStart: Date.now(),
-                    sessionDuration: 0,
-                    messageCount: 0
-                },
-                lastInteraction: Date.now()
-            };
-        } else {
-            const userData = conversations[userIdentifier].userData;
-            if (userName && !userData.name) userData.name = userName;
-            if (preferredName) userData.preferredName = preferredName;
-            userData.sessionDuration = Math.floor((Date.now() - userData.sessionStart) / 60000);
-            userData.isNewUser = false;
-        }
-
-        const convo = conversations[userIdentifier];
-        convo.history.push({ role: 'user', content: message });
-        convo.userData.messageCount++;
-
-        const systemPrompt = createSystemPrompt(userIdentifier, convo.userData);
-
-        // Call Anthropic API based on SDK version
-        let rawResponse;
-        try {
-            if (anthropic.messages) {
-                rawResponse = await callAnthropicMessages(systemPrompt, convo.history, 500);
-            } else if (anthropic.completions) {
-                let prompt = `${systemPrompt}\n`;
-                for (const msg of convo.history) {
-                    prompt += msg.role === 'user' ? `\nHuman: ${msg.content}` : `\nAssistant: ${msg.content}`;
-                }
-                prompt += '\nAssistant:';
-                rawResponse = await callAnthropicCompletions(prompt, 500);
-            } else {
-                throw new Error('Neither messages nor completions API is available.');
-            }
-        } catch (apiError) {
-            console.error('Anthropic API error:', apiError.message);
-            return res.json({ response: getFallbackResponse(message) });
-        }
-
-        // Process the response
-        const royResponse = processResponse(rawResponse, message);
-
-        // Update conversation history
-        convo.history.push({ role: 'assistant', content: royResponse });
-        convo.lastInteraction = Date.now();
-
-        // Maintain history size limit
-        if (convo.history.length > 10) {
-            convo.history = convo.history.slice(-10);
-        }
-
-        res.json({ response: royResponse, sessionInfo: convo.userData });
-    } catch (error) {
-        handleError(res, error);
-    }
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        anthropicClientAvailable: !!anthropic,
-        apiType: anthropic?.messages ? 'messages' : (anthropic?.completions ? 'completions' : 'unknown')
-    });
-});
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Default route to serve index.html
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Start the server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`ROY Chatbot Backend is running on port ${PORT}.`);
-});
+        return res.status(400).json({ response
