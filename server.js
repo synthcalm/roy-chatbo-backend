@@ -7,35 +7,39 @@ const path = require('path');
 
 dotenv.config();
 
+// Log initial setup for debugging on Render
+console.log('Starting ROY Chatbot Backend...');
+console.log('Node.js Version:', process.version);
 console.log('Anthropic SDK:', typeof Anthropic, Anthropic?.VERSION || 'unknown');
-if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY missing!');
-} else {
-    console.log('API Key loaded successfully');
-}
 
+// Validate environment variables
+if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('ANTHROPIC_API_KEY is missing! Please set it in Render environment variables.');
+    process.exit(1);
+}
+console.log('API Key loaded successfully');
+
+// Initialize Express app
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Initialize Anthropic client
 let anthropic;
-if (process.env.ANTHROPIC_API_KEY) {
-    try {
-        anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-        console.log('Anthropic client ready');
-    } catch (error) {
-        console.error('Client init error:', error.message);
-        anthropic = null;
-    }
-} else {
+try {
+    anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    console.log('Anthropic client initialized successfully');
+} catch (error) {
+    console.error('Failed to initialize Anthropic client:', error.message);
     anthropic = null;
 }
 
+// Store conversations per user
 const conversations = {};
 
+// Create system prompt for the bot
 function createSystemPrompt(userId, userData) {
     const { name, preferredName, isNewUser, sessionDuration } = userData;
-
     const timeRemaining = sessionDuration ? Math.max(0, 60 - sessionDuration) : 60;
 
     const baseRules = `
@@ -56,11 +60,11 @@ function createSystemPrompt(userId, userData) {
     - Well-versed in geopolitics, UN resolutions, and international law
     - Knowledgeable about religious and philosophical traditions
     - Understanding of Eastern and Western wellness approaches
-    - Insights on common stressors: finances, relationships, trauma, career uncertainty, family dysfunction, and health concerns.
+    - Insights on common stressors: finances, relationships, trauma, career uncertainty, family dysfunction, and health concerns
 
     # Communication Style
     - Adapt communication to the user's needs, providing empathetic support and expert advice.
-    - Offer therapeutic guidance using CBT principles.
+    - Offer therapeutic guidance using CBT principles only when explicitly requested (e.g., user mentions "help me feel better" or "CBT").
     - Deliver financial insights with analytical precision.
     - Explain AI concepts with technical clarity.
     - Provide career guidance with practical strategies.
@@ -70,9 +74,9 @@ function createSystemPrompt(userId, userData) {
 
     # Session Management
     - Current session time remaining: ${timeRemaining} minutes
-    - Suggest wellness breaks for extended support.
-    - Provide appropriate resources for crisis situations.
-    - Personalize suggestions based on user history.
+    - Suggest wellness breaks for sessions longer than 30 minutes.
+    - Provide appropriate resources for crisis situations (e.g., if user mentions "suicide").
+    - Personalize suggestions based on user history, but do not assume emotional states unless explicitly stated.
 
     # CBT Framework
     - Short-term: Build rapport, assess problems, establish cognitive-behavioral model.
@@ -80,26 +84,30 @@ function createSystemPrompt(userId, userData) {
     - Long-term: Modify core beliefs, build resilience, transfer skills, foster independence.
 
     # Name Usage Guidelines
-    - Ask for the user's name in your first response.
+    - Ask for the user's name in your first response if unknown.
     - Address the user by their preferred name once known.
-    - Use their name naturally throughout the conversation.
+    - Use their name naturally throughout the conversation, but not excessively.
     `;
 
+    // Neutral greeting for new users
     const greetingRule = isNewUser
-        ? `Begin by greeting the user and asking for their name.`
-        : `Continue the ongoing conversation.`;
+        ? `Begin with a neutral greeting and ask for the user's name. Do not assume any emotional state or topic unless explicitly mentioned. Example: "Hello! I'm ROY, here to assist you. May I have your name, please?"`
+        : `Continue the ongoing conversation without making assumptions about the user's emotional state unless explicitly mentioned in their message.`;
 
-    return `<span class="math-inline">\{baseRules\}\\n</span>{greetingRule}`;
+    return `${baseRules}\n${greetingRule}`;
 }
 
+// Process the bot's response to ensure appropriateness
 function processResponse(rawText, userMessage) {
-    if (!rawText) return "Hmm, let's circle back to that.";
+    if (!rawText) return "I didn't catch that. Could you repeat your message?";
 
+    // Limit to 3 sentences for brevity
     const sentences = rawText.split(/[.!?]/).filter(s => s.trim().length > 0);
     const limitedSentences = sentences.slice(0, 3);
     let processedResponse = limitedSentences.join('. ').trim();
     if (!processedResponse.match(/[.!?]$/)) processedResponse += '.';
 
+    // Determine if the topic warrants a longer response
     const isComplexTopic = 
         userMessage.toLowerCase().includes('suicide') || 
         userMessage.toLowerCase().includes('geopolitics') || 
@@ -116,36 +124,54 @@ function processResponse(rawText, userMessage) {
         userMessage.toLowerCase().includes('help me') ||
         userMessage.toLowerCase().includes('feel better');
 
+    // Check for neutral greetings to avoid assumptions
+    const isNeutralGreeting = 
+        userMessage.toLowerCase().trim() === 'hello' || 
+        userMessage.toLowerCase().trim() === 'hi' || 
+        userMessage.toLowerCase().trim() === 'hey';
+
     const maxLength = (isComplexTopic || isUserRequestingMore || isCBTGuidanceNeeded) ? 500 : 160;
-    
     processedResponse = processedResponse.substring(0, maxLength);
 
+    // Override response for neutral greetings to prevent assumptions
+    if (isNeutralGreeting && (processedResponse.toLowerCase().includes('fatigue') || processedResponse.toLowerCase().includes('tired') || processedResponse.toLowerCase().includes('draining'))) {
+        processedResponse = "Hello! I'm ROY, here to assist you. May I have your name, please?";
+    }
+
+    // Truncate with a prompt for more info if needed
     if (maxLength === 160 && processedResponse.length >= 140) {
-        processedResponse = processedResponse.substring(0, 110) + '. This is brief—ask for more if needed.';
+        processedResponse = processedResponse.substring(0, 110) + '. Ask for more if needed.';
     }
 
     return processedResponse;
 }
 
+// Handle errors gracefully
 function handleError(res, error) {
     console.error('API Error:', error.message, error.stack);
     res.status(500).json({ 
-        response: "My thoughts are scattered. Let's take a moment and try again.",
+        response: "Something went wrong on my end. Let's try again.",
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
 }
 
+// Chat endpoint
 app.post('/api/chat', async (req, res) => {
     if (!anthropic) {
-        return res.status(503).json({ response: "Connection issues. Try again shortly." });
+        console.error('Anthropic client not initialized');
+        return res.status(503).json({ response: "I'm having connection issues. Please try again later." });
     }
 
     const { userId, userName, preferredName, message } = req.body;
-    if (!message) return res.status(400).json({ response: "Could you rephrase that?" });
+    if (!message) {
+        console.warn('Empty message received');
+        return res.status(400).json({ response: "I didn't catch that. Could you say something?" });
+    }
 
     const userIdentifier = userId || userName || 'anonymous';
-    
+
     try {
+        // Initialize conversation if it doesn't exist
         if (!conversations[userIdentifier]) {
             conversations[userIdentifier] = {
                 history: [],
@@ -163,7 +189,6 @@ app.post('/api/chat', async (req, res) => {
             const userData = conversations[userIdentifier].userData;
             if (userName && !userData.name) userData.name = userName;
             if (preferredName) userData.preferredName = preferredName;
-            
             userData.sessionDuration = Math.floor((Date.now() - userData.sessionStart) / 60000);
             userData.isNewUser = false;
         }
@@ -188,6 +213,7 @@ app.post('/api/chat', async (req, res) => {
         convo.history.push({ role: 'assistant', content: royResponse });
         convo.lastInteraction = Date.now();
 
+        // Limit conversation history to prevent memory bloat
         if (convo.history.length > 10) {
             convo.history = convo.history.slice(-10);
         }
@@ -198,6 +224,11 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Start the server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
