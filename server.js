@@ -37,6 +37,15 @@ try {
         apiKey: process.env.ANTHROPIC_API_KEY
     });
     console.log('Anthropic client initialized successfully');
+    
+    // Check if the messages method is available
+    if (!anthropic.messages && anthropic.completions) {
+        console.log('Using older Anthropic SDK with completions API');
+    } else if (anthropic.messages) {
+        console.log('Using newer Anthropic SDK with messages API');
+    } else {
+        console.error('Anthropic SDK has neither messages nor completions API');
+    }
 } catch (error) {
     console.error('Anthropic client initialization failed:', error.message);
     anthropic = null;
@@ -169,6 +178,39 @@ function getFallbackResponse(message) {
         : "Sorry, I can't process your request right now. Try again later.";
 }
 
+// Call Anthropic API using completions API (for older SDK versions)
+async function callAnthropicCompletions(prompt, maxTokens = 500) {
+    try {
+        const response = await anthropic.completions.create({
+            model: 'claude-3-5-sonnet-20241022',
+            prompt: prompt,
+            max_tokens_to_sample: maxTokens,
+            temperature: 0.7
+        });
+        return response.completion;
+    } catch (error) {
+        console.error('Anthropic completions API error:', error.message);
+        throw error;
+    }
+}
+
+// Call Anthropic API using messages API (for newer SDK versions)
+async function callAnthropicMessages(system, messages, maxTokens = 500) {
+    try {
+        const response = await anthropic.messages.create({
+            model: 'claude-3-5-sonnet-20241022',
+            system: system,
+            messages: messages,
+            max_tokens: maxTokens,
+            temperature: 0.7
+        });
+        return response.content[0].text;
+    } catch (error) {
+        console.error('Anthropic messages API error:', error.message);
+        throw error;
+    }
+}
+
 // API endpoint for chat
 app.post('/api/chat', async (req, res) => {
     // Check if Anthropic client is available
@@ -222,16 +264,34 @@ app.post('/api/chat', async (req, res) => {
 
         console.log(`Processing message from user: ${userIdentifier}`);
         
-        // Call Anthropic API
-        let apiResponse;
+        // Call Anthropic API based on SDK version
+        let rawResponse;
         try {
-            apiResponse = await anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20241022',
-                max_tokens: 500,
-                temperature: 0.7,
-                system: systemPrompt,
-                messages: convo.history
-            });
+            if (anthropic.messages && typeof anthropic.messages.create === 'function') {
+                // Using newer Messages API
+                rawResponse = await callAnthropicMessages(
+                    systemPrompt,
+                    convo.history,
+                    500
+                );
+            } else if (anthropic.completions && typeof anthropic.completions.create === 'function') {
+                // Using older Completions API
+                // Format conversation for completions API
+                let prompt = `${systemPrompt}\n\n`;
+                
+                for (const msg of convo.history) {
+                    if (msg.role === 'user') {
+                        prompt += `\nHuman: ${msg.content}`;
+                    } else if (msg.role === 'assistant') {
+                        prompt += `\nAssistant: ${msg.content}`;
+                    }
+                }
+                
+                prompt += '\nAssistant:';
+                rawResponse = await callAnthropicCompletions(prompt, 500);
+            } else {
+                throw new Error('Neither messages nor completions API is available');
+            }
             
             console.log('Anthropic API call successful');
         } catch (apiError) {
@@ -242,7 +302,6 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // Process the response
-        const rawResponse = apiResponse?.content?.[0]?.text || '';
         const royResponse = processResponse(rawResponse, message);
 
         // Update conversation history
@@ -254,12 +313,6 @@ app.post('/api/chat', async (req, res) => {
             convo.history = convo.history.slice(-10);
         }
 
-        // Clean up old conversations every hour
-        const ONE_HOUR = 60 * 60 * 1000;
-        if (Date.now() % ONE_HOUR < 5000) {
-            cleanupOldConversations();
-        }
-
         res.json({ 
             response: royResponse, 
             sessionInfo: convo.userData 
@@ -269,25 +322,13 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// Clean up old conversations to prevent memory leaks
-function cleanupOldConversations() {
-    const now = Date.now();
-    const TWO_HOURS = 2 * 60 * 60 * 1000;
-    
-    Object.keys(conversations).forEach(userId => {
-        if (now - conversations[userId].lastInteraction > TWO_HOURS) {
-            console.log(`Cleaning up idle conversation for user: ${userId}`);
-            delete conversations[userId];
-        }
-    });
-}
-
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'OK',
         timestamp: new Date().toISOString(),
-        anthropicClientAvailable: !!anthropic
+        anthropicClientAvailable: !!anthropic,
+        apiType: anthropic?.messages ? 'messages' : (anthropic?.completions ? 'completions' : 'unknown')
     });
 });
 
