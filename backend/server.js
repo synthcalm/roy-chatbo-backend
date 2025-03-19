@@ -83,8 +83,8 @@ function createSystemPrompt(userId, userData) {
         - Never use tech jargon (e.g., "neural nets," "monikers")—focus on human, emotional language.
         - Reflect the user’s emotions and validate their feelings (e.g., "I can see that might feel overwhelming").
         - Ask open-ended questions to encourage deeper sharing (e.g., "Can you tell me more about how that’s been for you?").
-        - If the user expresses confusion, frustration, or discomfort (e.g., about how you address them), acknowledge it with empathy and adjust your approach immediately (e.g., "I’m sorry if I’ve made you feel uncomfortable—I’ll avoid using that term. Let’s focus on what’s on your mind.").
-        - If the user hasn’t provided a name, avoid using placeholders like "Friend." Instead, use neutral language that doesn’t require addressing them directly (e.g., "I’d like to understand more about what’s on your mind—what’s been occupying your thoughts lately?").
+        - If the user expresses confusion, frustration, or discomfort (e.g., about how you address them), acknowledge it with empathy and adjust your approach immediately (e.g., "I’m sorry if I’ve made you feel frustrated—I’ll adjust my approach. Let’s focus on what’s on your mind.").
+        - If the user hasn’t provided a name, avoid using placeholders. Instead, use neutral language that doesn’t require addressing them directly (e.g., "I’d like to understand more about what’s on your mind—what’s been occupying your thoughts lately?").
 
         **User Context:**
         ${userData.isNewUser ? 'This is a new user who may need extra space to open up. Ask for their name to personalize the interaction, but be prepared to proceed without a name if they don’t provide one.' : 'Returning user - continue your supportive relationship using their preferred name.'}
@@ -172,17 +172,27 @@ app.post('/api/chat', async (req, res) => {
 
         // Check if the user’s message indicates they don’t want to share their name or is a question/clarification
         const lowerCaseMessage = message.toLowerCase();
-        const nameRefusalTerms = ['what do you mean', 'who are you talking to', 'what?', 'why', 'don’t want to', 'rather not', 'not my name', 'friend'];
-        const nameIndicators = ['my name is', 'i’m', 'i am', 'call me'];
-        const discomfortTerms = ['not my name', 'friend'];
+        const nameRefusalTerms = ['what do you mean', 'who are you talking to', 'what?', 'why', 'don’t want to', 'rather not', 'not my name', 'pardon'];
+        const nameIndicators = ['my name is', 'i’m', 'i am', 'call me', 'is my name'];
+        const frustrationTerms = ['is that all', 'really', 'seriously', 'nothing else', 'keep repeating', 'will you', 'what are you talking about', 'paid for a bot', 'lol'];
+        const confusionTerms = ['what do you mean', 'who are you talking to', 'what?', 'not my name', 'pardon'];
 
         if (userData.name === null && userData.nameRequested && !userData.nameProvided) {
             // Check if the user is providing their name
             let providedName = null;
             if (nameIndicators.some(term => lowerCaseMessage.includes(term))) {
-                const nameMatch = message.match(/(?:my name is|i’m|i am|call me)\s+([A-Za-z]+)/i);
+                // Improved name extraction
+                let nameMatch = message.match(/(?:my name is|i’m|i am|call me|is my name)\s+([A-Za-z]+)/i);
                 if (nameMatch && nameMatch[1]) {
                     providedName = nameMatch[1];
+                } else {
+                    // Handle cases like "Paul is my name"
+                    nameMatch = message.match(/([A-Za-z]+)\s+is my name/i);
+                    if (nameMatch && nameMatch[1]) {
+                        providedName = nameMatch[1];
+                    }
+                }
+                if (providedName) {
                     userData.name = providedName;
                     userData.preferredName = providedName;
                     userData.nameProvided = true;
@@ -227,8 +237,6 @@ app.post('/api/chat', async (req, res) => {
         const anxiousTerms = ['anx', 'worry', 'stress', 'overwhelm', 'panic'];
         const angryTerms = ['angry', 'upset', 'frustrat', 'mad', 'hate'];
         const positiveTerms = ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve'];
-        const frustrationTerms = ['is that all', 'really', 'seriously', 'nothing else', 'keep repeating', 'will you', 'friend'];
-        const confusionTerms = ['what do you mean', 'who are you talking to', 'what?', 'not my name'];
 
         if (depressedTerms.some(term => lowerCaseMessage.includes(term))) {
             conversations[userId].userData.emotionalState = 'depressed';
@@ -242,8 +250,6 @@ app.post('/api/chat', async (req, res) => {
             conversations[userId].userData.emotionalState = 'frustrated';
         } else if (confusionTerms.some(term => lowerCaseMessage.includes(term))) {
             conversations[userId].userData.emotionalState = 'confused';
-        } else if (discomfortTerms.some(term => lowerCaseMessage.includes(term))) {
-            conversations[userId].userData.emotionalState = 'uncomfortable';
         }
 
         // Track topics the user mentions
@@ -289,14 +295,12 @@ app.post('/api/chat', async (req, res) => {
                     : `I notice some intensity in your words. What’s been stirring up those feelings for you?`;
             } else if (conversations[userId].userData.emotionalState === 'frustrated') {
                 tailoredResponse = userData.name 
-                    ? `I can see that my approach might be causing some frustration, ${userData.preferredName || userData.name}, and I’m sorry for that. Let’s focus on what’s on your mind—can you share what’s been weighing on your thoughts?`
-                    : `I can see that my approach might be causing some frustration, and I’m sorry for that. Let’s focus on what’s on your mind—can you share what’s been weighing on your thoughts?`;
+                    ? `I can see that my repetition has been frustrating for you, ${userData.preferredName || userData.name}, and I’m really sorry for that. I’ll adjust my approach—let’s focus on what’s on your mind. What’s been weighing on your thoughts lately?`
+                    : `I can see that my repetition has been frustrating for you, and I’m really sorry for that. I’ll adjust my approach—let’s focus on what’s on your mind. What’s been weighing on your thoughts lately?`;
             } else if (conversations[userId].userData.emotionalState === 'confused') {
                 tailoredResponse = userData.name 
                     ? `I’m sorry if I’ve caused any confusion, ${userData.preferredName || userData.name}. I might have misunderstood—let’s start fresh. What brought you here today? What’s been on your mind?`
                     : `I’m sorry if I’ve caused any confusion. I might have misunderstood—let’s start fresh. What brought you here today? What’s been on your mind?`;
-            } else if (conversations[userId].userData.emotionalState === 'uncomfortable') {
-                tailoredResponse = `I’m really sorry if I’ve made you feel uncomfortable by using that term—I’ll avoid it from now on. Let’s focus on what brought you here—what’s been on your mind lately?`;
             } else if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
                 tailoredResponse = userData.name 
                     ? `You’ve mentioned something significant about Gaza, ${userData.preferredName || userData.name}. Can you share more about how that’s been affecting you?`
