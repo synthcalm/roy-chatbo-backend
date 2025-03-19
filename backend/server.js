@@ -4,23 +4,23 @@ const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const bodyParser = require('body-parser');
 
-// Load environment variables
+// Load environment variables (like secret keys for the app)
 dotenv.config();
 
 console.log('Initializing ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
 
-// Validate API key early
+// Check if the API key for Anthropic (the AI service) is available
 if (!process.env.ANTHROPIC_API_KEY) {
     console.error('ANTHROPIC_API_KEY is missing! Please set it in your environment variables.');
     process.exit(1);
 }
 console.log('API Key loaded successfully.');
 
-// Initialize Express app
+// Set up the app using Express (a tool to create a web server)
 const app = express();
 
-// Configure CORS for flexible origins
+// Allow the app to work with specific websites (CORS settings for security)
 app.use(cors({
     origin: [
         'https://roy-chatbo-backend.onrender.com',
@@ -32,10 +32,10 @@ app.use(cors({
     credentials: true
 }));
 
-// Middleware to parse JSON requests
+// Allow the app to understand JSON messages (like the ones users send)
 app.use(bodyParser.json());
 
-// Initialize Anthropic client
+// Connect to Anthropic (the AI service that powers Roy)
 let anthropic;
 try {
     anthropic = new Anthropic({
@@ -54,10 +54,10 @@ try {
     anthropic = null;
 }
 
-// Store conversation data
+// Store conversations for each user (like a memory for Roy)
 const conversations = {};
 
-// ========== Utility Functions ==========
+// ========== Helper Functions ==========
 function createSystemPrompt(userId, userData) {
     return `You are ROY, an advanced AI assistant embodying a unique blend of personalities and knowledge.
         User ID: ${userId}.
@@ -74,9 +74,9 @@ function createSystemPrompt(userId, userData) {
         - You are trained in CBT techniques and can guide users through exercises.
 
         **Session Structure for Depression Support:**
-        - First 15-20 minutes: Focus entirely on listening and understanding.
-        - Middle portion: Gentle exploration of patterns and feelings.
-        - Final portion: Only if appropriate, offer perspective or small actionable steps.
+        - First 15-20 minutes: Focus entirely on listening and understanding. Reflect emotions and ask open-ended questions.
+        - Middle portion: Gentle exploration of patterns and feelings, using CBT to identify thought patterns if appropriate.
+        - Final portion: Only if the user is ready, offer perspective or small actionable steps.
         - Remember the session lasts approximately one hour - don't rush the process.
 
         **Communication Style:**
@@ -89,6 +89,8 @@ function createSystemPrompt(userId, userData) {
         **User Context:**
         ${userData.isNewUser ? 'This is a new user who may need extra space to open up.' : 'Returning user - continue your supportive relationship.'}
         Name: ${userData.name}, Preferred Name: ${userData.preferredName}.
+        Emotional State: ${userData.emotionalState}.
+        Topics Discussed: ${userData.topicsDiscussed.join(', ') || 'none yet'}.
         Maintain emotional context across sessions.`;
 }
 
@@ -105,8 +107,8 @@ function processResponse(rawResponse, userMessage) {
 async function callAnthropicMessages(systemPrompt, messages) {
     return anthropic.messages.create({
         model: 'claude-3-opus-20240229',
-        max_tokens: 1000,
-        temperature: 0.7,
+        max_tokens: 1000, // Allow for longer, thoughtful responses
+        temperature: 0.7, // Slightly higher for more warmth in responses
         system: systemPrompt,
         messages: messages
     });
@@ -129,14 +131,14 @@ app.post('/api/chat', async (req, res) => {
 
     const { userId, userName, preferredName, message } = req.body;
 
-    // Validate message
+    // Check if the message is valid
     if (!message || typeof message !== 'string' || message.trim() === '') {
         console.warn('Empty or invalid message received.');
         return res.status(400).json({ response: "I didn't catch that. Could you say something?" });
     }
 
     try {
-        // Initialize user conversation if it doesn't exist
+        // Set up a new conversation for the user if they don’t have one
         if (!conversations[userId]) {
             conversations[userId] = {
                 messages: [],
@@ -153,14 +155,14 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const userData = conversations[userId].userData;
-        const systemPrompt = "You are Roy, a helpful and concise AI assistant.";
-        const temperature = 0.5;
-        const maxTokens = 200;
+        const systemPrompt = createSystemPrompt(userId, userData);
+        const temperature = 0.7;
+        const maxTokens = 1000;
         
-        // Add user message to conversation
+        // Add the user’s message to their conversation history
         conversations[userId].messages.push({ role: 'user', content: message });
         
-        // Call Anthropic API
+        // Call the Anthropic AI to get a response
         let rawResponse;
         if (anthropic.messages) {
             rawResponse = await callAnthropicMessages(
@@ -172,13 +174,13 @@ app.post('/api/chat', async (req, res) => {
             rawResponse = await callAnthropicCompletions(prompt);
         }
 
-        // Process and store the response
+        // Process the AI’s response
         const processedResponse = processResponse(rawResponse, message);
         conversations[userId].messages.push({ role: 'assistant', content: processedResponse });
         conversations[userId].userData.isNewUser = false;
         conversations[userId].userData.sessionDuration += 1;
 
-        // Update emotional state based on message content
+        // Check the user’s message for emotional clues
         const depressedTerms = ['depress', 'sad', 'down', 'hopeless', 'worthless', 'tired'];
         const anxiousTerms = ['anx', 'worry', 'stress', 'overwhelm', 'panic'];
         const angryTerms = ['angry', 'upset', 'frustrat', 'mad', 'hate'];
@@ -196,16 +198,15 @@ app.post('/api/chat', async (req, res) => {
             conversations[userId].userData.emotionalState = 'improving';
         }
 
-        // Track session progress
+        // Track how far along the session is
         if (conversations[userId].userData.sessionDuration < 5) {
-            conversations[userId].userData.activeListeningPhase = true; // Early in session, focus on listening
+            conversations[userId].userData.activeListeningPhase = true; // Focus on listening early on
         } else if (conversations[userId].userData.sessionDuration >= 5 && 
                 conversations[userId].userData.sessionDuration < 15) {
-            // Mid-session, can start gentle exploration if appropriate
-            conversations[userId].userData.activeListeningPhase = false;
+            conversations[userId].userData.activeListeningPhase = false; // Start gentle exploration
         }
 
-        // Track topics as mentioned in message
+        // Track topics the user mentions
         const topicKeywords = {
             'work': ['job', 'career', 'boss', 'workplace', 'coworker'],
             'relationships': ['partner', 'friend', 'family', 'relationship', 'marriage'],
@@ -226,13 +227,27 @@ app.post('/api/chat', async (req, res) => {
             }
         });
 
-        res.json({ response: processedResponse });
+        // Customize Roy’s response based on the session stage and user’s emotions
+        let tailoredResponse = processedResponse;
+        if (conversations[userId].userData.activeListeningPhase) {
+            // Early stage: Just listen and reflect
+            tailoredResponse = `I hear you, ${userData.preferredName}. It sounds like you're feeling a bit down right now—like tears in rain, these moments can feel heavy. Can you tell me more about what’s been on your mind? I’m here to listen.`;
+        } else if (conversations[userId].userData.emotionalState === 'depressed' && 
+                   conversations[userId].userData.sessionDuration >= 5) {
+            // Middle stage: Gently explore with a CBT approach
+            tailoredResponse = `I’ve noticed you’ve mentioned feeling down, ${userData.preferredName}—perhaps a shadow on your soul’s landscape? Could it be tied to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together. If you’re ready, we could try identifying one small thought to challenge.`;
+        } else if (conversations[userId].userData.sessionDuration >= 15) {
+            // Later stage: Offer a suggestion if the user seems ready
+            tailoredResponse = `${processedResponse} If it feels right, you might consider sharing this with someone you trust, or perhaps a small activity like a walk to shift your perspective—simple steps can illuminate the path forward.`;
+        }
+
+        res.json({ response: tailoredResponse });
     } catch (error) {
         handleError(res, error);
     }
 });
 
-// Start the server
+// Start the server on a specific port (like a phone number for the app)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
