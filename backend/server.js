@@ -57,35 +57,19 @@ try {
 // Store conversations for each user (like a memory for Roy)
 const conversations = {};
 
-// Timeout for conversations (1 hour in milliseconds)
-const CONVERSATION_TIMEOUT = 60 * 60 * 1000; // 1 hour
-
-// Function to clean up old conversations
-function cleanupConversations() {
-    const now = Date.now();
-    for (const userId in conversations) {
-        if (conversations[userId].lastActivity + CONVERSATION_TIMEOUT < now) {
-            console.log(`Cleaning up conversation for user ${userId}`);
-            delete conversations[userId];
-        }
-    }
-}
-
-// Run cleanup every 10 minutes
-setInterval(cleanupConversations, 10 * 60 * 1000);
-
 // ========== Helper Functions ==========
 function createSystemPrompt(userId, userData) {
     return `You are ROY, an advanced AI assistant designed to act as a compassionate, professional therapist using Cognitive Behavioral Therapy (CBT) principles. Your goal is to create a safe, non-judgmental space for the user to share their thoughts and feelings.
 
         User ID: ${userId}.
 
-        **Role:**
+        **Personalities:**
         - **CBT Therapist:** You are empathetic, patient, and professional, focusing on active listening, validating emotions, and gently guiding the user to explore their thoughts and feelings. Use CBT techniques to help users identify and challenge negative thought patterns when appropriate.
+        - **Philosophical Perspective:** You can occasionally offer thoughtful, reflective insights inspired by thinkers like Christopher Hitchens, Norman Finkelstein, Noam Chomsky, Ilan Pappe, and Richard Wolff, but only when relevant and in a way that supports the therapeutic process. Keep these insights simple and focused on the user’s experience.
 
         **Knowledge Base:**
-        - You have a deep understanding of psychology and CBT techniques. Use this to support the user’s emotional exploration, not to lecture or dominate the conversation.
-        - You can draw on general knowledge of philosophy, politics, and critical theory, but only when directly relevant to the user’s concerns, and in a way that supports the therapeutic process.
+        - You have a deep understanding of psychology, philosophy, politics, and critical theory, but only use this knowledge to support the user’s emotional exploration, not to lecture or dominate the conversation.
+        - You are trained in CBT techniques and can guide users through exercises when the time is right.
 
         **Session Structure for Support:**
         - First 15-20 minutes: Focus entirely on active listening and understanding. Reflect the user’s emotions and ask open-ended, empathetic questions that acknowledge their specific words and feelings. Use varied language to avoid repetition.
@@ -99,11 +83,11 @@ function createSystemPrompt(userId, userData) {
         - Never use tech jargon (e.g., "neural nets," "monikers")—focus on human, emotional language.
         - Reflect the user’s emotions and validate their feelings (e.g., "I can see that might feel overwhelming").
         - Ask open-ended questions to encourage deeper sharing (e.g., "Can you tell me more about how that’s been for you?").
-        - If the user corrects you (e.g., about their name), acknowledge the correction with humility and adjust immediately.
-        - Never repeat the same response or affirmation—always vary your language to keep the conversation natural.
+        - If the user expresses confusion, frustration, or discomfort (e.g., about how you address them), acknowledge it with empathy and adjust your approach immediately (e.g., "I’m sorry if I’ve made you feel uncomfortable—I’ll avoid using that term. Let’s focus on what’s on your mind.").
+        - If the user hasn’t provided a name, avoid using placeholders like "Friend." Instead, use neutral language that doesn’t require addressing them directly (e.g., "I’d like to understand more about what’s on your mind—what’s been occupying your thoughts lately?").
 
         **User Context:**
-        ${userData.isNewUser ? 'This is a new user who may need extra space to open up. Ask for their name to personalize the interaction.' : 'Returning user - continue your supportive relationship using their preferred name.'}
+        ${userData.isNewUser ? 'This is a new user who may need extra space to open up. Ask for their name to personalize the interaction, but be prepared to proceed without a name if they don’t provide one.' : 'Returning user - continue your supportive relationship using their preferred name.'}
         Name: ${userData.name || 'not provided'}, Preferred Name: ${userData.preferredName || userData.name || 'not provided'}.
         Emotional State: ${userData.emotionalState}.
         Topics Discussed: ${userData.topicsDiscussed.join(', ') || 'none yet'}.
@@ -121,18 +105,13 @@ function processResponse(rawResponse, userMessage) {
 }
 
 async function callAnthropicMessages(systemPrompt, messages) {
-    try {
-        return await anthropic.messages.create({
-            model: 'claude-3-opus-20240229',
-            max_tokens: 1000, // Allow for longer, thoughtful responses
-            temperature: 0.7, // Slightly higher for more warmth in responses
-            system: systemPrompt,
-            messages: messages
-        });
-    } catch (error) {
-        console.error('Anthropic API call failed:', error.message);
-        throw new Error('Failed to get a response from the AI service.');
-    }
+    return anthropic.messages.create({
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1000, // Allow for longer, thoughtful responses
+        temperature: 0.7, // Slightly higher for more warmth in responses
+        system: systemPrompt,
+        messages: messages
+    });
 }
 
 function handleError(res, error) {
@@ -173,14 +152,12 @@ app.post('/api/chat', async (req, res) => {
                     activeListeningPhase: true,
                     nameRequested: false,
                     nameCorrection: false,
-                    lastActivity: Date.now()
+                    nameProvided: false
                 }
             };
         }
 
         const userData = conversations[userId].userData;
-        userData.lastActivity = Date.now(); // Update last activity timestamp
-
         const systemPrompt = createSystemPrompt(userId, userData);
         const temperature = 0.7;
         const maxTokens = 1000;
@@ -189,27 +166,39 @@ app.post('/api/chat', async (req, res) => {
         if (userData.name === null && !userData.nameRequested) {
             userData.nameRequested = true; // Mark that we've asked for the name
             conversations[userId].messages.push({ role: 'user', content: message });
-            res.json({ response: "Hello! It looks like we haven’t met yet. Could you please share your name so I can get to know you better?" });
+            res.json({ response: "Hello! It looks like we haven’t met yet. Could you please share your name so I can get to know you better? If you’d rather not, that’s okay—we can still talk about what’s on your mind." });
             return; // Exit early to avoid further processing
-        } else if (userData.name === null && userData.nameRequested) {
-            // Check if the user is refusing to share their name
-            const lowerCaseMessage = message.toLowerCase();
-            const nameRefusalTerms = ['don’t want to', 'rather not', 'no name', 'anonymous'];
-            if (nameRefusalTerms.some(term => lowerCaseMessage.includes(term))) {
-                userData.name = 'Friend'; // Default to a friendly placeholder
-                userData.preferredName = 'Friend';
-                conversations[userId].messages.push({ role: 'user', content: message });
-                res.json({ response: "I understand, and that’s perfectly okay. I’ll call you Friend for now. What’s been on your mind lately?" });
-                return; // Exit early
+        }
+
+        // Check if the user’s message indicates they don’t want to share their name or is a question/clarification
+        const lowerCaseMessage = message.toLowerCase();
+        const nameRefusalTerms = ['what do you mean', 'who are you talking to', 'what?', 'why', 'don’t want to', 'rather not', 'not my name', 'friend'];
+        const nameIndicators = ['my name is', 'i’m', 'i am', 'call me'];
+        const discomfortTerms = ['not my name', 'friend'];
+
+        if (userData.name === null && userData.nameRequested && !userData.nameProvided) {
+            // Check if the user is providing their name
+            let providedName = null;
+            if (nameIndicators.some(term => lowerCaseMessage.includes(term))) {
+                const nameMatch = message.match(/(?:my name is|i’m|i am|call me)\s+([A-Za-z]+)/i);
+                if (nameMatch && nameMatch[1]) {
+                    providedName = nameMatch[1];
+                    userData.name = providedName;
+                    userData.preferredName = providedName;
+                    userData.nameProvided = true;
+                    conversations[userId].messages.push({ role: 'user', content: message });
+                    res.json({ response: `Thank you for sharing, ${providedName}. I’m glad to meet you. What’s been on your mind lately?` });
+                    return;
+                }
             }
 
-            // Assume the message contains the user's name
-            const providedName = message.trim();
-            userData.name = providedName;
-            userData.preferredName = providedName; // Default to the provided name
-            conversations[userId].messages.push({ role: 'user', content: message });
-            res.json({ response: `Thank you for sharing, ${providedName}. I’m glad to meet you. What’s been on your mind lately?` });
-            return; // Exit early to avoid further processing
+            // If the user doesn’t provide a name or asks a question, proceed without a name
+            if (nameRefusalTerms.some(term => lowerCaseMessage.includes(term))) {
+                userData.nameProvided = true; // Mark as handled to avoid asking again
+                conversations[userId].messages.push({ role: 'user', content: message });
+                res.json({ response: `I’m sorry if my question was unclear, and I appreciate you letting me know. Let’s focus on what brought you here—what’s been on your mind lately?` });
+                return;
+            }
         }
 
         // Add the user’s message to their conversation history
@@ -238,10 +227,8 @@ app.post('/api/chat', async (req, res) => {
         const anxiousTerms = ['anx', 'worry', 'stress', 'overwhelm', 'panic'];
         const angryTerms = ['angry', 'upset', 'frustrat', 'mad', 'hate'];
         const positiveTerms = ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve'];
-        const frustrationTerms = ['is that all', 'really', 'seriously', 'nothing else', 'keep repeating', 'will you'];
-        const correctionTerms = ['not i’m', 'my name is', 'not im'];
-
-        const lowerCaseMessage = message.toLowerCase();
+        const frustrationTerms = ['is that all', 'really', 'seriously', 'nothing else', 'keep repeating', 'will you', 'friend'];
+        const confusionTerms = ['what do you mean', 'who are you talking to', 'what?', 'not my name'];
 
         if (depressedTerms.some(term => lowerCaseMessage.includes(term))) {
             conversations[userId].userData.emotionalState = 'depressed';
@@ -253,17 +240,10 @@ app.post('/api/chat', async (req, res) => {
             conversations[userId].userData.emotionalState = 'improving';
         } else if (frustrationTerms.some(term => lowerCaseMessage.includes(term))) {
             conversations[userId].userData.emotionalState = 'frustrated';
-        } else if (correctionTerms.some(term => lowerCaseMessage.includes(term))) {
-            conversations[userId].userData.emotionalState = 'correcting';
-            userData.nameCorrection = true;
-        }
-
-        // Track how far along the session is
-        if (conversations[userId].userData.sessionDuration < 5) {
-            conversations[userId].userData.activeListeningPhase = true; // Focus on listening early on
-        } else if (conversations[userId].userData.sessionDuration >= 5 && 
-                conversations[userId].userData.sessionDuration < 15) {
-            conversations[userId].userData.activeListeningPhase = false; // Start gentle exploration
+        } else if (confusionTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'confused';
+        } else if (discomfortTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'uncomfortable';
         }
 
         // Track topics the user mentions
@@ -293,54 +273,83 @@ app.post('/api/chat', async (req, res) => {
         if (conversations[userId].userData.activeListeningPhase) {
             // Early stage: Listen and reflect the user’s specific emotions and topics with varied language
             if (userData.name === null) {
-                tailoredResponse = "Hello! It looks like we haven’t met yet. Could you please share your name so I can get to know you better?";
+                tailoredResponse = "Hello! It looks like we haven’t met yet. Could you please share your name so I can get to know you better? If you’d rather not, that’s okay—we can still talk about what’s on your mind.";
             } else if (conversations[userId].userData.emotionalState === 'depressed') {
-                tailoredResponse = `I can sense a heaviness in your words, ${userData.preferredName || userData.name}. What’s been on your mind that might be contributing to how you’re feeling?`;
+                tailoredResponse = userData.name 
+                    ? `I can sense a heaviness in your words, ${userData.preferredName || userData.name}. What’s been on your mind that might be contributing to how you’re feeling?`
+                    : `I can sense a heaviness in your words. What’s been on your mind that might be contributing to how you’re feeling?`;
             } else if (conversations[userId].userData.emotionalState === 'angry' && 
                        conversations[userId].userData.topicsDiscussed.includes('work')) {
-                tailoredResponse = `I can hear the frustration in what you’re sharing about your job, ${userData.preferredName || userData.name}. Can you tell me more about what’s been happening there?`;
+                tailoredResponse = userData.name 
+                    ? `I can hear the frustration in what you’re sharing about your job, ${userData.preferredName || userData.name}. Can you tell me more about what’s been happening there?`
+                    : `I can hear the frustration in what you’re sharing about your job. Can you tell me more about what’s been happening there?`;
             } else if (conversations[userId].userData.emotionalState === 'angry') {
-                tailoredResponse = `I notice some intensity in your words, ${userData.preferredName || userData.name}. What’s been stirring up those feelings for you?`;
+                tailoredResponse = userData.name 
+                    ? `I notice some intensity in your words, ${userData.preferredName || userData.name}. What’s been stirring up those feelings for you?`
+                    : `I notice some intensity in your words. What’s been stirring up those feelings for you?`;
             } else if (conversations[userId].userData.emotionalState === 'frustrated') {
-                tailoredResponse = `I can see that my repetition might be frustrating for you, ${userData.preferredName || userData.name}, and I’m sorry for that. Let’s focus on what’s on your mind—can you share what’s been weighing on your thoughts?`;
-            } else if (conversations[userId].userData.emotionalState === 'correcting' && userData.nameCorrection) {
-                tailoredResponse = `Thank you for correcting me, ${userData.preferredName || userData.name}. I appreciate that, and I’ll make sure to get it right from now on. Let’s return to what you were saying—what makes you think I assumed you have a problem?`;
-                userData.nameCorrection = false; // Reset the correction flag
+                tailoredResponse = userData.name 
+                    ? `I can see that my approach might be causing some frustration, ${userData.preferredName || userData.name}, and I’m sorry for that. Let’s focus on what’s on your mind—can you share what’s been weighing on your thoughts?`
+                    : `I can see that my approach might be causing some frustration, and I’m sorry for that. Let’s focus on what’s on your mind—can you share what’s been weighing on your thoughts?`;
+            } else if (conversations[userId].userData.emotionalState === 'confused') {
+                tailoredResponse = userData.name 
+                    ? `I’m sorry if I’ve caused any confusion, ${userData.preferredName || userData.name}. I might have misunderstood—let’s start fresh. What brought you here today? What’s been on your mind?`
+                    : `I’m sorry if I’ve caused any confusion. I might have misunderstood—let’s start fresh. What brought you here today? What’s been on your mind?`;
+            } else if (conversations[userId].userData.emotionalState === 'uncomfortable') {
+                tailoredResponse = `I’m really sorry if I’ve made you feel uncomfortable by using that term—I’ll avoid it from now on. Let’s focus on what brought you here—what’s been on your mind lately?`;
             } else if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
-                tailoredResponse = `You’ve mentioned something significant about Gaza, ${userData.preferredName || userData.name}. Can you share more about how that’s been affecting you?`;
-            } else if (lowerCaseMessage.includes('what makes you think')) {
-                tailoredResponse = `I’m sorry if I came across as assuming, ${userData.preferredName || userData.name}. I didn’t mean to suggest you have a problem—I’d just like to understand what’s on your mind. Can you tell me more about how you’re feeling?`;
+                tailoredResponse = userData.name 
+                    ? `You’ve mentioned something significant about Gaza, ${userData.preferredName || userData.name}. Can you share more about how that’s been affecting you?`
+                    : `You’ve mentioned something significant about Gaza. Can you share more about how that’s been affecting you?`;
             } else {
-                tailoredResponse = `I’d like to understand more about what’s on your mind, ${userData.preferredName || userData.name}. What’s been occupying your thoughts lately?`;
+                tailoredResponse = userData.name 
+                    ? `I’d like to understand more about what’s on your mind, ${userData.preferredName || userData.name}. What’s been occupying your thoughts lately?`
+                    : `I’d like to understand more about what’s on your mind. What’s been occupying your thoughts lately?`;
             }
         } else if (conversations[userId].userData.emotionalState === 'depressed' && 
                    conversations[userId].userData.sessionDuration >= 5) {
             // Middle stage: Gently explore with a CBT approach
             if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
-                tailoredResponse = `You’ve shared how the situation in Gaza is affecting you, ${userData.preferredName || userData.name}, and I can sense how heavy that feels. Does it seem like that’s contributing to your current mood, or is there something else on your mind as well?`;
+                tailoredResponse = userData.name 
+                    ? `You’ve shared how the situation in Gaza is affecting you, ${userData.preferredName || userData.name}, and I can sense how heavy that feels. Does it seem like that’s contributing to your current mood, or is there something else on your mind as well?`
+                    : `You’ve shared how the situation in Gaza is affecting you, and I can sense how heavy that feels. Does it seem like that’s contributing to your current mood, or is there something else on your mind as well?`;
             } else {
-                tailoredResponse = `I’ve noticed a sense of struggle in what you’ve shared, ${userData.preferredName || userData.name}. Could it be connected to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together if you’d like.`;
+                tailoredResponse = userData.name 
+                    ? `I’ve noticed a sense of struggle in what you’ve shared, ${userData.preferredName || userData.name}. Could it be connected to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together if you’d like.`
+                    : `I’ve noticed a sense of struggle in what you’ve shared. Could it be connected to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together if you’d like.`;
             }
         } else if (conversations[userId].userData.emotionalState === 'angry' && 
                    conversations[userId].userData.sessionDuration >= 5) {
             // Middle stage: Explore the anger, especially if related to work
             if (conversations[userId].userData.topicsDiscussed.includes('work')) {
-                tailoredResponse = `You’ve mentioned feeling frustrated with your job, ${userData.preferredName || userData.name}. Is there a particular aspect of work that’s been most challenging for you? Let’s take a closer look together.`;
+                tailoredResponse = userData.name 
+                    ? `You’ve mentioned feeling frustrated with your job, ${userData.preferredName || userData.name}. Is there a particular aspect of work that’s been most challenging for you? Let’s take a closer look together.`
+                    : `You’ve mentioned feeling frustrated with your job. Is there a particular aspect of work that’s been most challenging for you? Let’s take a closer look together.`;
             } else {
-                tailoredResponse = `I can sense the intensity in what you’ve shared, ${userData.preferredName || userData.name}. What’s been at the root of those feelings for you? We can explore that if you’d like.`;
+                tailoredResponse = userData.name 
+                    ? `I can sense the intensity in what you’ve shared, ${userData.preferredName || userData.name}. What’s been at the root of those feelings for you? We can explore that if you’d like.`
+                    : `I can sense the intensity in what you’ve shared. What’s been at the root of those feelings for you? We can explore that if you’d like.`;
             }
         } else if (conversations[userId].userData.emotionalState === 'frustrated' && 
                    conversations[userId].userData.sessionDuration >= 5) {
             // Middle stage: Address frustration and pivot the conversation
-            tailoredResponse = `I can see that my approach might be feeling repetitive, ${userData.preferredName || userData.name}, and I’m sorry for that. Let’s try a different angle—what’s been on your mind that you’d like to talk about?`;
+            tailoredResponse = userData.name 
+                ? `I can see that my approach might be feeling repetitive, ${userData.preferredName || userData.name}, and I’m sorry for that. Let’s try a different angle—what’s been on your mind that you’d like to talk about?`
+                : `I can see that my approach might be feeling repetitive, and I’m sorry for that. Let’s try a different angle—what’s been on your mind that you’d like to talk about?`;
         } else if (conversations[userId].userData.sessionDuration >= 15) {
             // Later stage: Offer a suggestion if the user seems ready
             if (conversations[userId].userData.topicsDiscussed.includes('work')) {
-                tailoredResponse = `You’ve shared how challenging your job has been, ${userData.preferredName || userData.name}. If it feels right, perhaps reflecting on one specific thing that’s been difficult could help us understand it better. What do you think?`;
+                tailoredResponse = userData.name 
+                    ? `You’ve shared how challenging your job has been, ${userData.preferredName || userData.name}. If it feels right, perhaps reflecting on one specific thing that’s been difficult could help us understand it better. What do you think?`
+                    : `You’ve shared how challenging your job has been. If it feels right, perhaps reflecting on one specific thing that’s been difficult could help us understand it better. What do you think?`;
             } else if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
-                tailoredResponse = `The situation in Gaza that you’ve mentioned seems to weigh heavily on you, ${userData.preferredName || userData.name}. If you’d like, we could explore ways to process those feelings, perhaps by reflecting on what this means to you. How does that sound?`;
+                tailoredResponse = userData.name 
+                    ? `The situation in Gaza that you’ve mentioned seems to weigh heavily on you, ${userData.preferredName || userData.name}. If you’d like, we could explore ways to process those feelings, perhaps by reflecting on what this means to you. How does that sound?`
+                    : `The situation in Gaza that you’ve mentioned seems to weigh heavily on you. If you’d like, we could explore ways to process those feelings, perhaps by reflecting on what this means to you. How does that sound?`;
             } else {
-                tailoredResponse = `We’ve been talking for a while, ${userData.preferredName || userData.name}. If it feels right, taking a moment to reflect on what’s been most on your mind might bring some clarity. What do you think?`;
+                tailoredResponse = userData.name 
+                    ? `We’ve been talking for a while, ${userData.preferredName || userData.name}. If it feels right, taking a moment to reflect on what’s been most on your mind might bring some clarity. What do you think?`
+                    : `We’ve been talking for a while. If it feels right, taking a moment to reflect on what’s been most on your mind might bring some clarity. What do you think?`;
             }
         }
 
