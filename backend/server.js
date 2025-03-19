@@ -112,14 +112,6 @@ async function callAnthropicMessages(systemPrompt, messages) {
     });
 }
 
-async function callAnthropicCompletions(prompt) {
-    return anthropic.completions.create({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens_to_sample: 1000,
-        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`
-    });
-}
-
 function handleError(res, error) {
     console.error('An unexpected error occurred:', error.message);
     res.status(500).json({
