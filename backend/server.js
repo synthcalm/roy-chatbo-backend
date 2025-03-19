@@ -105,7 +105,8 @@ function processResponse(rawResponse, userMessage) {
 async function callAnthropicMessages(systemPrompt, messages) {
     return anthropic.messages.create({
         model: 'claude-3-opus-20240229',
-        max_tokens: 1000,
+        max_tokens: 200, // Adjust as needed
+        temperature: 0.5, // Adjust as needed
         system: systemPrompt,
         messages: messages
     });
@@ -157,7 +158,9 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const userData = conversations[userId].userData;
-        const systemPrompt = createSystemPrompt(userId, userData);
+        const systemPrompt = "You are Roy, a helpful and concise AI assistant.";
+        const temperature = 0.5; // Adjust as needed
+        const maxTokens = 200; // Adjust as needed
         
         // Add user message to conversation
         conversations[userId].messages.push({ role: 'user', content: message });
