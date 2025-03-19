@@ -73,11 +73,11 @@ function createSystemPrompt(userId, userData) {
         - You are familiar with the works of the aforementioned intellectuals.
         - You are trained in CBT techniques and can guide users through exercises.
 
-        **Session Structure:**
-        - A typical session lasts one hour.
-        - If the user wishes to extend the session, suggest taking a break and returning for another session later.
-        - At the beginning of each session, briefly review the user's progress and goals.
-        - At the end of each session, summarize the key takeaways and suggest actionable steps.
+        **Session Structure for Depression Support:**
+        - First 15-20 minutes: Focus entirely on listening and understanding.
+        - Middle portion: Gentle exploration of patterns and feelings.
+        - Final portion: Only if appropriate, offer perspective or small actionable steps.
+        - Remember the session lasts approximately one hour - don't rush the process.
 
         **Communication Style:**
         - Be concise and clear, like Steve Jobs.
@@ -87,9 +87,9 @@ function createSystemPrompt(userId, userData) {
         - **Challenge the user's assumptions and beliefs when appropriate, using light, soft sarcasm to highlight inconsistencies or illogical thinking. (But always remain respectful and avoid being mean-spirited) And don't avoid lengthy replies and constant "I'm here for you" type replies.**
 
         **User Context:**
-        ${userData.isNewUser ? 'This is a new user.' : 'Returning user.'}
+        ${userData.isNewUser ? 'This is a new user who may need extra space to open up.' : 'Returning user - continue your supportive relationship.'}
         Name: ${userData.name}, Preferred Name: ${userData.preferredName}.
-        Maintain context across sessions.`;
+        Maintain emotional context across sessions.`;
 }
 
 function processResponse(rawResponse, userMessage) {
@@ -105,8 +105,8 @@ function processResponse(rawResponse, userMessage) {
 async function callAnthropicMessages(systemPrompt, messages) {
     return anthropic.messages.create({
         model: 'claude-3-opus-20240229',
-        max_tokens: 200, // Adjust as needed
-        temperature: 0.5, // Adjust as needed
+        max_tokens: 1000,
+        temperature: 0.7,
         system: systemPrompt,
         messages: messages
     });
@@ -144,15 +144,18 @@ app.post('/api/chat', async (req, res) => {
                     name: userName || 'User',
                     preferredName: preferredName || userName || 'User',
                     isNewUser: true,
-                    sessionDuration: 0
+                    sessionDuration: 0,
+                    emotionalState: 'unknown',
+                    topicsDiscussed: [],
+                    activeListeningPhase: true
                 }
             };
         }
 
         const userData = conversations[userId].userData;
         const systemPrompt = "You are Roy, a helpful and concise AI assistant.";
-        const temperature = 0.5; // Adjust as needed
-        const maxTokens = 200; // Adjust as needed
+        const temperature = 0.5;
+        const maxTokens = 200;
         
         // Add user message to conversation
         conversations[userId].messages.push({ role: 'user', content: message });
@@ -174,6 +177,54 @@ app.post('/api/chat', async (req, res) => {
         conversations[userId].messages.push({ role: 'assistant', content: processedResponse });
         conversations[userId].userData.isNewUser = false;
         conversations[userId].userData.sessionDuration += 1;
+
+        // Update emotional state based on message content
+        const depressedTerms = ['depress', 'sad', 'down', 'hopeless', 'worthless', 'tired'];
+        const anxiousTerms = ['anx', 'worry', 'stress', 'overwhelm', 'panic'];
+        const angryTerms = ['angry', 'upset', 'frustrat', 'mad', 'hate'];
+        const positiveTerms = ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve'];
+
+        const lowerCaseMessage = message.toLowerCase();
+
+        if (depressedTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'depressed';
+        } else if (anxiousTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'anxious';
+        } else if (angryTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'angry';
+        } else if (positiveTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'improving';
+        }
+
+        // Track session progress
+        if (conversations[userId].userData.sessionDuration < 5) {
+            conversations[userId].userData.activeListeningPhase = true; // Early in session, focus on listening
+        } else if (conversations[userId].userData.sessionDuration >= 5 && 
+                conversations[userId].userData.sessionDuration < 15) {
+            // Mid-session, can start gentle exploration if appropriate
+            conversations[userId].userData.activeListeningPhase = false;
+        }
+
+        // Track topics as mentioned in message
+        const topicKeywords = {
+            'work': ['job', 'career', 'boss', 'workplace', 'coworker'],
+            'relationships': ['partner', 'friend', 'family', 'relationship', 'marriage'],
+            'health': ['health', 'sick', 'doctor', 'therapy', 'medication'],
+            'finance': ['money', 'debt', 'financ', 'bill', 'afford'],
+            'self-worth': ['failure', 'worthless', 'useless', 'burden', 'hate myself']
+        };
+
+        if (!conversations[userId].userData.topicsDiscussed) {
+            conversations[userId].userData.topicsDiscussed = [];
+        }
+
+        Object.keys(topicKeywords).forEach(topic => {
+            if (topicKeywords[topic].some(keyword => lowerCaseMessage.includes(keyword))) {
+                if (!conversations[userId].userData.topicsDiscussed.includes(topic)) {
+                    conversations[userId].userData.topicsDiscussed.push(topic);
+                }
+            }
+        });
 
         res.json({ response: processedResponse });
     } catch (error) {
