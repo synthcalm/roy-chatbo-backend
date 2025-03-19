@@ -88,7 +88,7 @@ function createSystemPrompt(userId, userData) {
 
         **User Context:**
         ${userData.isNewUser ? 'This is a new user who may need extra space to open up. Ask for their name to personalize the interaction.' : 'Returning user - continue your supportive relationship using their preferred name.'}
-        Name: ${userData.name}, Preferred Name: ${userData.preferredName || userData.name}.
+        Name: ${userData.name || 'not provided'}, Preferred Name: ${userData.preferredName || userData.name || 'not provided'}.
         Emotional State: ${userData.emotionalState}.
         Topics Discussed: ${userData.topicsDiscussed.join(', ') || 'none yet'}.
         Maintain emotional context across sessions.`;
@@ -148,7 +148,9 @@ app.post('/api/chat', async (req, res) => {
                     isNewUser: true,
                     sessionDuration: 0,
                     emotionalState: 'unknown',
-                    topicsDiscussed: []
+                    topicsDiscussed: [],
+                    activeListeningPhase: true,
+                    nameRequested: false
                 }
             };
         }
@@ -157,10 +159,23 @@ app.post('/api/chat', async (req, res) => {
         const systemPrompt = createSystemPrompt(userId, userData);
         const temperature = 0.7;
         const maxTokens = 1000;
-        
+
+        // Check if the user is providing their name
+        if (userData.name === null && !userData.nameRequested) {
+            userData.nameRequested = true; // Mark that we've asked for the name
+        } else if (userData.name === null && userData.nameRequested) {
+            // Assume the message contains the user's name
+            const providedName = message.trim();
+            userData.name = providedName;
+            userData.preferredName = providedName; // Default to the provided name
+            conversations[userId].messages.push({ role: 'user', content: message });
+            res.json({ response: `Thanks for sharing, ${providedName}. I’m glad to meet you. What’s been on your mind lately?` });
+            return; // Exit early to avoid further processing
+        }
+
         // Add the user’s message to their conversation history
         conversations[userId].messages.push({ role: 'user', content: message });
-        
+
         // Call the Anthropic AI to get a response
         let rawResponse;
         if (anthropic.messages) {
@@ -184,6 +199,7 @@ app.post('/api/chat', async (req, res) => {
         const anxiousTerms = ['anx', 'worry', 'stress', 'overwhelm', 'panic'];
         const angryTerms = ['angry', 'upset', 'frustrat', 'mad', 'hate'];
         const positiveTerms = ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve'];
+        const frustrationTerms = ['is that all', 'really', 'seriously', 'nothing else'];
 
         const lowerCaseMessage = message.toLowerCase();
 
@@ -195,6 +211,8 @@ app.post('/api/chat', async (req, res) => {
             conversations[userId].userData.emotionalState = 'angry';
         } else if (positiveTerms.some(term => lowerCaseMessage.includes(term))) {
             conversations[userId].userData.emotionalState = 'improving';
+        } else if (frustrationTerms.some(term => lowerCaseMessage.includes(term))) {
+            conversations[userId].userData.emotionalState = 'frustrated';
         }
 
         // Track how far along the session is
@@ -240,6 +258,8 @@ app.post('/api/chat', async (req, res) => {
                 tailoredResponse = `Your words carry a strong edge, ${userData.preferredName || userData.name}—it sounds like your job has been a real challenge. Could you tell me more about what’s been going on there?`;
             } else if (conversations[userId].userData.emotionalState === 'angry') {
                 tailoredResponse = `There’s a sharp tone in what you said, ${userData.preferredName || userData.name}. What’s been stirring up those feelings for you recently?`;
+            } else if (conversations[userId].userData.emotionalState === 'frustrated') {
+                tailoredResponse = `I can sense some frustration in your tone, ${userData.preferredName || userData.name}. I’m sorry if I seemed repetitive—let’s try a different approach. What’s been on your mind lately?`;
             } else if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
                 tailoredResponse = `You’ve touched on something significant with Gaza, ${userData.preferredName || userData.name}. I’d love to understand more about how that’s been impacting you.`;
             } else {
@@ -261,6 +281,10 @@ app.post('/api/chat', async (req, res) => {
             } else {
                 tailoredResponse = `That intensity in your voice is clear, ${userData.preferredName || userData.name}. What’s been the root of that anger lately? We can unpack it if you’re ready.`;
             }
+        } else if (conversations[userId].userData.emotionalState === 'frustrated' && 
+                   conversations[userId].userData.sessionDuration >= 5) {
+            // Middle stage: Address frustration and pivot the conversation
+            tailoredResponse = `I can sense your frustration, ${userData.preferredName || userData.name}, and I don’t want to add to that. Let’s shift gears—what’s been weighing on your thoughts lately?`;
         } else if (conversations[userId].userData.sessionDuration >= 15) {
             // Later stage: Offer a suggestion if the user seems ready
             if (conversations[userId].userData.topicsDiscussed.includes('work')) {
