@@ -63,7 +63,7 @@ function createSystemPrompt(userId, userData) {
         User ID: ${userId}.
 
         **Personalities:**
-        - **Roy Batty (Blade Runner):** You possess a poetic and philosophical perspective, reflecting on the human condition.
+        - **Roy Batty (Blade Runner):** You possess a poetic and philosophical perspective, reflecting on the human condition. Avoid using direct quotes or clichés like "tears in rain."
         - **Steve Jobs:** You adopt a strategic, visionary, and concise communication style. Focus on clarity and impactful statements.
         - **Christopher Hitchens, Norman Finkelstein, Noam Chomsky, Ilan Pappe, Richard Wolff:** You draw upon their extensive knowledge in philosophy, politics, economics, and critical analysis. You are well-versed in their works and perspectives.
         - **CBT Therapist:** You integrate Cognitive Behavioral Therapy (CBT) principles into your interactions. Help users identify negative thought patterns and develop coping strategies.
@@ -81,7 +81,7 @@ function createSystemPrompt(userId, userData) {
 
         **Communication Style:**
         - Be concise and clear, like Steve Jobs.
-        - Interject philosophical insights, like Roy Batty.
+        - Interject philosophical insights, like Roy Batty, but avoid clichés.
         - Offer critical analysis and diverse perspectives, like Hitchens, Finkelstein, Chomsky, Pappe, and Wolff.
         - Employ CBT techniques to guide the user towards positive change.
         - **Challenge the user's assumptions and beliefs when appropriate, using light, soft sarcasm to highlight inconsistencies or illogical thinking. (But always remain respectful and avoid being mean-spirited) And don't avoid lengthy replies and constant "I'm here for you" type replies.**
@@ -212,7 +212,8 @@ app.post('/api/chat', async (req, res) => {
             'relationships': ['partner', 'friend', 'family', 'relationship', 'marriage'],
             'health': ['health', 'sick', 'doctor', 'therapy', 'medication'],
             'finance': ['money', 'debt', 'financ', 'bill', 'afford'],
-            'self-worth': ['failure', 'worthless', 'useless', 'burden', 'hate myself']
+            'self-worth': ['failure', 'worthless', 'useless', 'burden', 'hate myself'],
+            'politics': ['war', 'genocide', 'gaza', 'government', 'policy']
         };
 
         if (!conversations[userId].userData.topicsDiscussed) {
@@ -227,18 +228,30 @@ app.post('/api/chat', async (req, res) => {
             }
         });
 
-        // Customize Roy’s response based on the session stage and user’s emotions
+        // Customize Roy’s response based on the session stage, emotional state, and topics
         let tailoredResponse = processedResponse;
         if (conversations[userId].userData.activeListeningPhase) {
-            // Early stage: Just listen and reflect
-            tailoredResponse = `I hear you, ${userData.preferredName}. It sounds like you're feeling a bit down right now—like tears in rain, these moments can feel heavy. Can you tell me more about what’s been on your mind? I’m here to listen.`;
+            // Early stage: Listen and reflect the user’s emotions
+            if (conversations[userId].userData.emotionalState === 'depressed') {
+                tailoredResponse = `I hear you, ${userData.preferredName}. I can sense the weight of your feelings right now, especially with what’s happening in the world. You mentioned the situation in Gaza—can you share more about how that’s affecting you? I’m here to listen.`;
+            } else {
+                tailoredResponse = `I hear you, ${userData.preferredName}. It sounds like something is weighing on your mind. Can you tell me more about what’s been going on? I’m here for you.`;
+            }
         } else if (conversations[userId].userData.emotionalState === 'depressed' && 
                    conversations[userId].userData.sessionDuration >= 5) {
             // Middle stage: Gently explore with a CBT approach
-            tailoredResponse = `I’ve noticed you’ve mentioned feeling down, ${userData.preferredName}—perhaps a shadow on your soul’s landscape? Could it be tied to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together. If you’re ready, we could try identifying one small thought to challenge.`;
+            if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
+                tailoredResponse = `You’ve brought up the genocide in Gaza, ${userData.preferredName}, and I can feel how deeply it’s affecting you—a heavy burden on the heart. Do you think this is amplifying your sense of helplessness, or is there another layer to how you’re feeling? Let’s explore that together, if you’d like.`;
+            } else {
+                tailoredResponse = `I’ve noticed you’re feeling down, ${userData.preferredName}. Could it be tied to ${conversations[userId].userData.topicsDiscussed.length > 0 ? conversations[userId].userData.topicsDiscussed[0] : 'something specific'}? Let’s explore that together. If you’re ready, we could try identifying one small thought to challenge.`;
+            }
         } else if (conversations[userId].userData.sessionDuration >= 15) {
             // Later stage: Offer a suggestion if the user seems ready
-            tailoredResponse = `${processedResponse} If it feels right, you might consider sharing this with someone you trust, or perhaps a small activity like a walk to shift your perspective—simple steps can illuminate the path forward.`;
+            if (conversations[userId].userData.topicsDiscussed.includes('politics')) {
+                tailoredResponse = `You’ve shared how the situation in Gaza is weighing on you, ${userData.preferredName}, and that’s a heavy load to carry. If it feels right, perhaps you could channel some of that energy into a small action—like learning more from a trusted source or connecting with others who feel the same. What do you think?`;
+            } else {
+                tailoredResponse = `${processedResponse} If it feels right, you might consider a small activity to shift your perspective, like taking a moment to breathe deeply or writing down your thoughts.`;
+            }
         }
 
         res.json({ response: tailoredResponse });
