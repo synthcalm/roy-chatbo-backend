@@ -43,16 +43,10 @@ if (!process.env.ANTHROPIC_API_KEY) {
 console.log('API Key loaded successfully.');
 
 // Set up the Anthropic API client
-let anthropic;
-try {
-    anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY
-    });
-    console.log('Anthropic client set up successfully.');
-} catch (error) {
-    console.error('Error setting up Anthropic client:', error.message);
-    process.exit(1);
-}
+const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY
+});
+console.log('Anthropic client set up successfully.');
 
 // A simple test endpoint to check if the server is working
 app.get('/api/test', (req, res) => {
@@ -93,9 +87,9 @@ app.post('/api/chat', async (req, res) => {
     console.log(`Using userId: ${finalUserId}`);
 
     try {
-        // Send the message to the Anthropic API
-        const msg = await anthropic.messages.create({
-            model: 'claude-3-opus-20240229',
+        // Send the message to the Anthropic API using the latest SDK method
+        const response = await anthropic.messages.create({
+            model: 'claude-3-opus-20240229', // You can try 'claude-3-sonnet-20240229' if this model is unavailable
             max_tokens: 1000,
             temperature: 0.7,
             system: 'You are ROY, a friendly AI therapist and companion. Respond in a warm, empathetic tone.',
@@ -105,7 +99,7 @@ app.post('/api/chat', async (req, res) => {
         });
 
         // Get the response text from Anthropic
-        const responseText = msg.content && Array.isArray(msg.content) && msg.content[0].text ? msg.content[0].text : "I'm sorry, I couldn't generate a response.";
+        const responseText = response.content && Array.isArray(response.content) && response.content[0].text ? response.content[0].text : "I'm sorry, I couldn't generate a response.";
 
         res.json({ response: responseText });
     } catch (error) {
