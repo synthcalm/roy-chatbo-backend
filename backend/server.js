@@ -132,4 +132,9 @@ server.on('error', (error) => {
 
 // When Render.com stops the server, close it nicely
 process.on('SIGTERM', () => {
-    console
+    console.log('Render.com is stopping the server. Closing nicely...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
+});
