@@ -12,7 +12,10 @@ const app = express();
 // Allow the frontend to connect to the backend (CORS setup)
 // For now, allow all origins for testing (we'll restrict this later)
 app.use(cors({
-    origin: '*', // Allow all origins for testing
+    origin: (origin, callback) => {
+        console.log(`CORS check for origin: ${origin}`);
+        callback(null, true); // Allow all origins for testing
+    },
     methods: ['GET', 'POST'],
     credentials: true
 }));
