@@ -9,13 +9,14 @@ dotenv.config();
 // Create the server
 const app = express();
 
-// Allow the frontend to connect to the backend (CORS setup)
-// For now, allow all websites to connect (we'll make this more secure later)
+// Allow only specific websites to connect to the backend (CORS setup)
 app.use(cors({
-    origin: (origin, callback) => {
-        console.log(`Checking if this website can connect: ${origin}`);
-        callback(null, true); // Allow all websites for testing
-    },
+    origin: [
+        'https://roy-chatbot-backend.onrender.com',
+        'https://roy-chatbot.onrender.com',
+        'https://synthcalm.com',
+        process.env.FRONTEND_URL || 'https://roy-chatbot.onrender.com'
+    ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true
 }));
@@ -67,11 +68,12 @@ app.post('/api/chat', (req, res) => {
         });
     }
 
-    // If userId is missing, use a default one for testing
+    // If userId is missing, use a default one for now
     const finalUserId = userId || 'defaultUser123';
     console.log(`Using userId: ${finalUserId}`);
 
     // Send a simple response
+    // You can replace this with Anthropic API logic if desired
     const response = `Hello! I received your message: "${message}". I'm ROY, nice to meet you!`;
     res.json({ response });
 });
