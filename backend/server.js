@@ -10,48 +10,57 @@ dotenv.config();
 const app = express();
 
 // Allow the frontend to connect to the backend (CORS setup)
-// This lets your website (frontend) talk to this server
+// For now, allow all origins for testing (we'll restrict this later)
 app.use(cors({
-    origin: [
-        'https://roy-chatbot-backend.onrender.com', // Your backend URL
-        'https://roy-chatbot.onrender.com',         // Your frontend URL
-        process.env.FRONTEND_URL || 'https://roy-chatbot.onrender.com', // Fallback if FRONTEND_URL is not set
-        'https://synthcalm.com',                    // Another allowed domain
-        'http://localhost:3000'                     // For local testing (remove in production)
-    ].filter(Boolean), // Remove any empty values
-    methods: ['GET', 'POST'], // Allow these types of requests
-    credentials: true // Allow cookies or authentication if needed
+    origin: '*', // Allow all origins for testing
+    methods: ['GET', 'POST'],
+    credentials: true
 }));
 
 // Allow the server to understand JSON data sent from the frontend
 app.use(express.json());
 
+// Log all incoming requests to help with debugging
+app.use((req, res, next) => {
+    console.log(`Received ${req.method} request to ${req.url} from ${req.headers.origin}`);
+    next();
+});
+
 // Log when the server starts
 console.log('Starting the ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
 
-// A simple test endpoint to check if the server is running
+// A simple test endpoint to check if the server is reachable
+app.get('/api/test', (req, res) => {
+    console.log('Test endpoint accessed');
+    res.json({ message: 'Server is running!' });
+});
+
+// A simple health check endpoint
 app.get('/api/health', (req, res) => {
+    console.log('Health endpoint accessed');
     res.json({
         status: 'healthy',
-        uptime: process.uptime(), // How long the server has been running
-        timestamp: Date.now()    // Current time
+        uptime: process.uptime(),
+        timestamp: Date.now()
     });
 });
 
 // A simple chat endpoint to test communication
-// This will respond with a basic message (you can replace this with your Anthropic API logic later)
 app.post('/api/chat', (req, res) => {
     const { userId, message } = req.body;
 
+    console.log('Chat endpoint accessed with body:', req.body);
+
     // Check if the request has the required data
     if (!userId || !message || typeof message !== 'string' || message.trim() === '') {
+        console.log('Invalid request: missing userId or message');
         return res.status(400).json({
-            response: "I need both a user ID and a message to respond."
+            response: 'I need both a user ID and a message to respond.'
         });
     }
 
-    // For now, send a simple response (you can add your Anthropic API logic here later)
+    // Send a simple response
     const response = `Hello! I received your message: "${message}". I'm ROY, nice to meet you!`;
     res.json({ response });
 });
@@ -69,7 +78,7 @@ server.on('error', (error) => {
     process.exit(1);
 });
 
-// Handle shutting down the server gracefully (e.g., when Render.com restarts it)
+// Handle shutting down the server gracefully
 process.on('SIGTERM', () => {
     console.log('SIGTERM received. Shutting down gracefully...');
     server.close(() => {
