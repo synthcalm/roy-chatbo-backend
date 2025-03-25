@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { Anthropic } = require('@anthropic-ai/sdk');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // Load settings (like secret keys) from a file or Render.com's environment
 dotenv.config();
@@ -94,7 +94,7 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         // Send the message to the Anthropic API
-        const response = await anthropic.messages.create({
+        const msg = await anthropic.messages.create({
             model: 'claude-3-opus-20240229',
             max_tokens: 1000,
             temperature: 0.7,
@@ -105,7 +105,7 @@ app.post('/api/chat', async (req, res) => {
         });
 
         // Get the response text from Anthropic
-        const responseText = response.content && Array.isArray(response.content) ? response.content[0].text : "I'm sorry, I couldn't generate a response.";
+        const responseText = msg.content && Array.isArray(msg.content) && msg.content[0].text ? msg.content[0].text : "I'm sorry, I couldn't generate a response.";
 
         res.json({ response: responseText });
     } catch (error) {
