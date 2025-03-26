@@ -36,4 +36,23 @@ app.post('/api/log', async (req, res) => {
     try {
         const response = await anthropic.messages.create({
             model: 'claude-3-opus-20240229',
-            max_tokens: 10
+            max_tokens: 1000,
+            messages: [
+                { role: 'user', content: message },
+            ],
+        });
+
+        const botResponse = response.content[0].text;
+        console.log('Bot response:', botResponse);
+        res.json({ response: botResponse });
+    } catch (error) {
+        console.error('Error with Anthropic API:', error);
+        res.status(500).json({ response: 'Error processing your request' });
+    }
+});
+
+// Start the server
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+    console.log(`Started at ${new Date().toISOString()}`);
+});
