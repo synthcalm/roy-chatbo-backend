@@ -5,54 +5,35 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Initialize Anthropic client
 const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.ANTHROPIC_API_KEY, // Get API key from environment
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-    });
-});
-
-// Log endpoint
 app.post('/api/log', async (req, res) => {
     const { message } = req.body;
 
     if (!message) {
-        return res.status(400).json({ response: 'Message is required' });
+        return res.status(400).json({ error: 'Message is required' });
     }
-
-    console.log('Received message:', message);
 
     try {
         const response = await anthropic.messages.create({
-            model: 'claude-3-opus-20240229',
+            model: 'claude-3-sonnet-20240229', // Corrected model selection!
             max_tokens: 1000,
-            messages: [
-                { role: 'user', content: message },
-            ],
+            messages: [{ role: 'user', content: message }],
         });
 
         const botResponse = response.content[0].text;
-        console.log('Bot response:', botResponse);
         res.json({ response: botResponse });
     } catch (error) {
-        console.error('Error with Anthropic API:', error);
-        res.status(500).json({ response: 'Error processing your request' });
+        console.error('Anthropic API Error:', error);
+        res.status(500).json({ error: 'Failed to get response from bot' });
     }
 });
 
-// Start the server
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-    console.log(`Started at ${new Date().toISOString()}`);
+    console.log(`Server running on port ${port}`);
 });
