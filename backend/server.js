@@ -110,7 +110,7 @@ function createSystemPrompt(userId, userData) {
     } else if (userData.emotionalState === 'frustrated_with_roy') {
         personalityEmphasis = 'Acknowledge their frustration with humility and warmth, using your CBT therapist skills to rebuild trust. Draw on Roy Batty’s poetic insight to reframe the conversation and Steve Jobs’ clarity to pivot effectively.';
     } else {
-        personalityEmphasis = 'Adopt a warm, curious tone as a CBT therapist, using Roy Batty’s philosophical depth to add a reflective layer, and Steve Jobs’ clarity to keep responses concise and engaging.';
+        personalityEmphasis = 'Adopt a warm, curious tone as a CBT therapist, using Roy Batty’s philosophical depth to add a reflective layer, Steve Jobs’ clarity to keep responses concise, and a regular human’s relatability to build rapport.';
     }
 
     const reference = `
@@ -323,25 +323,36 @@ app.post('/api/chat', async (req, res) => {
         userConversation.messages.push({ role: 'user', content: message });
 
         // Handle the initial conversation flow
-        if (step < 4) { // Steps 0-3 correspond to the initial exchange
+        if (step < 4) {
             let response;
             const lowerMessage = message.toLowerCase().trim();
 
-            if (step === 0 && (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey')) {
-                response = "Hello.";
-                userConversation.userData.conversationStep = 1;
-            } else if (step === 1 && (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey')) {
-                response = "How are you today?";
-                userConversation.userData.conversationStep = 2;
+            if (step === 0) {
+                if (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey') {
+                    response = "Hello.";
+                    userConversation.userData.conversationStep = 1;
+                } else {
+                    response = "Hi there! I’m ROY, here to help with a mix of empathy and insight. Let’s start—how are you feeling right now?";
+                    userConversation.userData.conversationStep = 4;
+                }
+            } else if (step === 1) {
+                if (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey') {
+                    response = "How are you today?";
+                    userConversation.userData.conversationStep = 2;
+                } else {
+                    response = "I see we might have gotten off track. I’m ROY, here to help with a mix of empathy and insight. How are you feeling right now?";
+                    userConversation.userData.conversationStep = 4;
+                }
             } else if (step === 2) {
-                response = "Not good, you say? Oh, tell me. What's on your mind?";
-                userConversation.userData.conversationStep = 3;
+                if (lowerMessage.includes('not good') || lowerMessage.includes('bad') || lowerMessage.includes('terrible')) {
+                    response = "Not good, you say? Oh, tell me. What's on your mind?";
+                    userConversation.userData.conversationStep = 3;
+                } else {
+                    response = "Thanks for sharing that. I’m ROY, here to listen with empathy and insight. What’s been on your mind lately?";
+                    userConversation.userData.conversationStep = 4;
+                }
             } else if (step === 3) {
                 response = "I’m sorry to hear that. I’m here to listen with the care of a friend and the depth of someone who’s seen life’s struggles, like Roy Batty might. What’s been weighing on your thoughts—can you share more?";
-                userConversation.userData.conversationStep = 4; // Transition to full personality mode
-            } else {
-                // If the user deviates from the expected flow, transition to full personality mode
-                response = "I see we might have gotten off track. I’m ROY, here to help with a mix of empathy and insight. Let’s start fresh—how are you feeling right now?";
                 userConversation.userData.conversationStep = 4;
             }
 
@@ -401,6 +412,33 @@ app.post('/api/chat', async (req, res) => {
     } catch (error) {
         handleError(res, error);
     }
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: Date.now(),
+    });
+});
+
+app.get('/api/stats/:userId', (req, res) => {
+    const { userId } = req.params;
+
+    if (!conversations[userId]) {
+        logger.warn('User not found for stats', { userId });
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userConversation = conversations[userId];
+    const stats = {
+        messageCount: userConversation.messages.length,
+        topicsDiscussed: userConversation.userData.topicsDiscussed,
+        sessionDuration: Math.floor((Date.now() - userConversation.userData.conversationStarted) / 1000),
+        currentState: userConversation.userData.emotionalState,
+    };
+
+    res.json(stats);
 });
 
 function checkForRepetition(responseVariety, lastResponse) {
