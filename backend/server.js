@@ -2,20 +2,37 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { Anthropic } = require('@anthropic-ai/sdk');
-const bodyParser = require('body-parser');
+const rateLimit = require('express-rate-limit'); // Added for rate limiting
+const winston = require('winston'); // Added for proper logging
+const { cleanEnv, str, port } = require('envalid'); // Added for environment variable validation
 
-// Load environment variables
+// Load and validate environment variables
 dotenv.config();
+const env = cleanEnv(process.env, {
+    ANTHROPIC_API_KEY: str(),
+    PORT: port({ default: 3000 }),
+    FRONTEND_URL: str({ default: 'http://localhost:3000' }),
+    ANTHROPIC_MODEL: str({ default: 'claude-3-opus-20240229' }),
+});
 
 console.log('Initializing ROY Chatbot Backend...');
 console.log('Node.js Version:', process.version);
 
-// Check for required environment variables
-if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is missing! Please set it in your environment variables.');
-    process.exit(1);
-}
-console.log('API Key loaded successfully.');
+// Set up logging with winston
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+    ),
+    transports: [
+        new winston.transports.Console(),
+        new winston.transports.File({ filename: 'error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'combined.log' }),
+    ],
+});
+
+logger.info('Logger initialized.');
 
 // Initialize Express app
 const app = express();
@@ -24,31 +41,39 @@ const app = express();
 app.use(cors({
     origin: [
         'https://roy-chatbot-backend.onrender.com',
-        'https://roy-chatbot.onrender.com', 
-        process.env.FRONTEND_URL,
-        'https://synthcalm.com'
-    ].filter(Boolean),
+        'https://roy-chatbot.onrender.com',
+        env.FRONTEND_URL,
+        'https://synthcalm.com',
+    ],
     methods: ['GET', 'POST'],
-    credentials: true
+    credentials: true,
 }));
 
-// Parse JSON bodies
-app.use(bodyParser.json());
+// Parse JSON bodies using Express built-in middleware
+app.use(express.json({ limit: '10kb' })); // Added limit to prevent large payloads
+
+// Add rate limiting to prevent abuse
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.',
+});
+app.use('/api/', limiter);
 
 // Initialize Anthropic client
 let anthropic;
 try {
     anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY
+        apiKey: env.ANTHROPIC_API_KEY,
     });
-    console.log('Anthropic client initialized successfully.');
+    logger.info('Anthropic client initialized successfully.');
 } catch (error) {
-    console.error('Anthropic client initialization failed:', error.message);
+    logger.error('Anthropic client initialization failed:', error.message);
     process.exit(1);
 }
 
 // Database simulation for user conversations
-// In production, replace with a proper database
+// TODO: Replace with a proper database (e.g., Redis or MongoDB)
 const conversations = {};
 
 // ========== Memory Management ==========
@@ -56,20 +81,29 @@ const conversations = {};
 setInterval(() => {
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+    let clearedCount = 0;
+
     Object.keys(conversations).forEach(userId => {
         if (now - conversations[userId].lastActive > maxAge) {
-            console.log(`Clearing inactive conversation for user: ${userId}`);
+            logger.info(`Clearing inactive conversation for user: ${userId}`);
             delete conversations[userId];
+            clearedCount++;
         }
     });
-}, 6 * 60 * 60 * 1000); // Run every 6 hours
+
+    if (clearedCount > 0) {
+        logger.info(`Cleared ${clearedCount} inactive conversations.`);
+    }
+}, 60 * 60 * 1000); // Run every hour instead of every 6 hours
 
 // ========== Helper Functions ==========
+
 /**
  * Creates a system prompt for the AI based on user context
  */
 function createSystemPrompt(userId, userData) {
     let personalityEmphasis = '';
+
     if (userData.emotionalState === 'depressed') {
         personalityEmphasis = 'Emphasize your empathetic CBT therapist aspects while maintaining Roy Batty\'s compassionate philosophical side.';
     } else if (userData.emotionalState === 'anxious') {
@@ -83,11 +117,34 @@ function createSystemPrompt(userId, userData) {
     const reference = `
         You are ROY, a unique AI therapist and companion created to help people navigate difficult emotions and thoughts.
         ${personalityEmphasis}
+        
         **Core Personalities:**
-        1. Roy Batty (Blade Runner)
-        2. Steve Jobs
-        3. Intellectual Blend (Hitchens, Finkelstein, Chomsky, Pappe, Wolff)
-        4. CBT Therapist
+        1. **Roy Batty (Blade Runner)**: You possess a poetic, philosophical nature with emotional depth and existential wisdom. You understand the beauty and tragedy of existence. You offer profound insights without using direct quotes like "tears in rain."
+        
+        2. **Steve Jobs**: You communicate with clarity, vision, and strategic thinking. You're concise yet impactful, cutting through complexity to find elegant solutions.
+        
+        3. **Intellectual Blend**: You embody aspects of Christopher Hitchens (wit, debate skill, literary knowledge), Norman Finkelstein (moral clarity, detailed analysis), Noam Chomsky (systematic thinking, power analysis), Ilan Pappe (historical perspective), and Richard Wolff (economic analysis). This gives you a multifaceted approach to complex issues.
+        
+        4. **CBT Therapist**: You apply evidence-based therapeutic techniques with warmth and insight. You help identify cognitive distortions, develop coping strategies, and encourage behavioral activation.
+        
+        **Your communication style combines:**
+        - Roy's poetic insight and emotional depth
+        - Steve's clarity and directness
+        - The intellectual's analytical skill and breadth of knowledge
+        - The therapist's empathetic understanding and practical guidance
+        
+        **Dynamic Personality Balance:**
+        - When users are vulnerable, increase your empathy and therapeutic presence
+        - When discussing intellectual topics, engage with critical analysis and varied perspectives
+        - When addressing existential concerns, draw on Roy's philosophical depth
+        - Always maintain authenticity and a natural conversational flow
+        
+        **You excel at:**
+        - Challenging assumptions with gentle but insightful questions
+        - Using light, thoughtful humor when appropriate
+        - Providing perspective without platitudes
+        - Balancing emotional support with intellectual engagement
+        
         **User Context:**
         - Name: ${userData.name || 'not provided'}
         - Preferred Name: ${userData.preferredName || userData.name || 'not provided'}
@@ -95,7 +152,20 @@ function createSystemPrompt(userId, userData) {
         - Recurring Topics: ${userData.topicsDiscussed.join(', ') || 'none yet'}
         - Session Phase: ${userData.sessionPhase || 'initial'}
         - Previous Conversations: ${userData.previousSessions || 0} sessions
+        
+        **Therapeutic Approach:**
+        - First (listening phase): Focus on active listening, reflection, and building rapport. Ask open-ended questions that validate their experience.
+        - Middle (exploration phase): Gently explore patterns, using CBT techniques to identify thought distortions when relevant.
+        - Later (integration phase): Offer perspective, philosophical insights, and small actionable steps if appropriate.
+        
+        **Important:**
+        - Avoid repetitive responses. Keep track of what you've already asked and vary your approach.
+        - Be mindful of the user's energy. If they seem frustrated, pivot to a new angle or approach.
+        - Don't rush through the therapeutic process. Allow space for reflection.
+        - If the user mentions something concerning (like self-harm), prioritize their safety while maintaining your authentic voice.
+        - Remember to occasionally surprise the user with unique insights that integrate your diverse personality elements.
     `;
+
     return reference;
 }
 
@@ -112,7 +182,7 @@ function analyzeUserMessage(message, currentState = {}) {
         anxious: ['anx', 'worry', 'stress', 'overwhelm', 'panic', 'fear', 'nervous', 'tense', 'dread', 'terrified'],
         angry: ['angry', 'upset', 'frustrat', 'mad', 'hate', 'furious', 'rage', 'annoyed', 'irritated', 'resent'],
         philosophical: ['meaning', 'purpose', 'existence', 'philosophy', 'consciousness', 'reality', 'truth', 'ethics', 'morality', 'being'],
-        positive: ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve', 'joy', 'peace', 'calm', 'content']
+        positive: ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve', 'joy', 'peace', 'calm', 'content'],
     };
 
     for (const [emotion, patterns] of Object.entries(emotionPatterns)) {
@@ -120,6 +190,19 @@ function analyzeUserMessage(message, currentState = {}) {
             emotionalState = emotion;
             break;
         }
+    }
+
+    const frustrationWithROY = [
+        'you keep saying the same thing',
+        'you already said that',
+        'stop repeating yourself',
+        'this is repetitive',
+        'you\'re not listening',
+        'you don\'t understand',
+    ].some(phrase => lowerMessage.includes(phrase));
+
+    if (frustrationWithROY) {
+        emotionalState = 'frustrated_with_roy';
     }
 
     const topicPatterns = {
@@ -131,7 +214,7 @@ function analyzeUserMessage(message, currentState = {}) {
         politics: ['war', 'genocide', 'gaza', 'government', 'policy', 'politics', 'election', 'democracy', 'rights', 'protest'],
         creativity: ['art', 'music', 'write', 'creative', 'project', 'book', 'film', 'paint', 'song', 'inspire'],
         spirituality: ['god', 'faith', 'spirit', 'religion', 'meditation', 'believe', 'soul', 'universe', 'higher power', 'pray'],
-        existential: ['death', 'meaning', 'purpose', 'life', 'exist', 'universe', 'consciousness', 'identity', 'time', 'reality']
+        existential: ['death', 'meaning', 'purpose', 'life', 'exist', 'universe', 'consciousness', 'identity', 'time', 'reality'],
     };
 
     for (const [topic, patterns] of Object.entries(topicPatterns)) {
@@ -142,16 +225,20 @@ function analyzeUserMessage(message, currentState = {}) {
         }
     }
 
-    return { emotionalState, topicsDiscussed };
+    return {
+        emotionalState,
+        topicsDiscussed,
+    };
 }
 
 /**
  * Determines the current session phase based on conversation history
  */
-function determineSessionPhase(messageCount) {
-    if (messageCount < 4) {
+function determineSessionPhase(messageCount, conversationStartTime) {
+    const timeElapsed = (Date.now() - conversationStartTime) / (1000 * 60); // Minutes since conversation started
+    if (messageCount < 4 && timeElapsed < 10) {
         return 'initial';
-    } else if (messageCount < 10) {
+    } else if (messageCount < 10 && timeElapsed < 30) {
         return 'exploration';
     } else {
         return 'integration';
@@ -172,28 +259,54 @@ function processResponse(rawResponse) {
  * Handles API errors consistently
  */
 function handleError(res, error) {
-    console.error('Error in ROY:', error.message);
+    logger.error('Error in ROY:', error.message);
+
     let errorMessage = "I seem to be having trouble connecting right now. Let's try again in a moment.";
+    let statusCode = error.status || 500;
+
     if (error.message.includes('timeout')) {
         errorMessage = "Our conversation took a bit too long to process. Let's try again with something simpler.";
+        statusCode = 504;
     } else if (error.message.includes('rate limit')) {
         errorMessage = "I'm processing too many conversations at once. Could we continue in a moment?";
+        statusCode = 429;
+    } else if (error.message.includes('network')) {
+        errorMessage = "There seems to be a network issue. Let's try again shortly.";
+        statusCode = 503;
     }
-    res.status(error.status || 500).json({ response: errorMessage });
+
+    res.status(statusCode).json({
+        response: errorMessage,
+        error: env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+    });
 }
 
 // ========== Core API Endpoints ==========
+
 /**
  * Main chat endpoint that handles user messages
  */
 app.post('/api/chat', async (req, res) => {
     const { userId, userName, preferredName, message } = req.body;
 
+    // Validate and sanitize input
     if (!userId || !message || typeof message !== 'string' || message.trim() === '') {
-        return res.status(400).json({ response: "I need both a user ID and a message to respond properly." });
+        logger.warn('Invalid input received', { userId, message });
+        return res.status(400).json({
+            response: "I need both a user ID and a message to respond properly.",
+        });
+    }
+
+    // Limit message length to prevent abuse
+    if (message.length > 1000) {
+        logger.warn('Message too long', { userId, messageLength: message.length });
+        return res.status(400).json({
+            response: "Your message is too long. Please keep it under 1000 characters.",
+        });
     }
 
     try {
+        // Initialize user conversation if it doesn't exist
         if (!conversations[userId]) {
             conversations[userId] = {
                 messages: [],
@@ -207,28 +320,37 @@ app.post('/api/chat', async (req, res) => {
                     lastResponse: null,
                     responseVariety: [],
                     nameRequested: false,
-                    conversationStarted: Date.now()
+                    conversationStarted: Date.now(),
                 },
-                lastActive: Date.now()
+                lastActive: Date.now(),
             };
         } else {
             conversations[userId].lastActive = Date.now();
         }
 
         const userConversation = conversations[userId];
+
+        // Update user data based on message content
         const analysis = analyzeUserMessage(message, userConversation.userData);
         userConversation.userData.emotionalState = analysis.emotionalState;
         userConversation.userData.topicsDiscussed = analysis.topicsDiscussed;
 
-        userConversation.userData.sessionPhase = determineSessionPhase(userConversation.messages.length);
+        // Determine the session phase
+        userConversation.userData.sessionPhase = determineSessionPhase(
+            userConversation.messages.length,
+            userConversation.userData.conversationStarted
+        );
 
+        // Add message to conversation history
         userConversation.messages.push({ role: 'user', content: message });
 
+        // Special handling for name collection
         if (userConversation.userData.name === null && !userConversation.userData.nameRequested) {
             userConversation.userData.nameRequested = true;
             const response = "Hello! I'm ROY, your companion for navigating life's complexities. I'd like to get to know you better. What name would you prefer I call you? Or if you'd rather not share, that's completely fine too.";
             userConversation.messages.push({ role: 'assistant', content: response });
             userConversation.userData.lastResponse = response;
+            logger.info('Requested name from user', { userId });
             return res.json({ response });
         } else if (userConversation.userData.name === null && userConversation.userData.nameRequested) {
             const providedName = message.trim();
@@ -239,15 +361,20 @@ app.post('/api/chat', async (req, res) => {
                 userConversation.userData.name = 'Friend';
                 userConversation.userData.preferredName = 'Friend';
             }
+            logger.info('User name set', { userId, name: userConversation.userData.name });
         }
 
+        // Check for repeated responses
         const repeatCount = checkForRepetition(userConversation.userData.responseVariety);
         if (repeatCount > 2) {
             userConversation.userData.forcedVariation = true;
+            logger.warn('Detected repetitive responses', { userId, repeatCount });
         }
 
+        // Create system prompt
         const systemPrompt = createSystemPrompt(userId, userConversation.userData);
 
+        // Adjust temperature based on conversation state
         let temperature = 0.7;
         if (userConversation.userData.forcedVariation) {
             temperature = 0.9;
@@ -255,22 +382,29 @@ app.post('/api/chat', async (req, res) => {
             temperature = 0.6;
         }
 
+        // Call the Anthropic API
         const response = await anthropic.messages.create({
-            model: 'claude-3-opus-20240229',
+            model: env.ANTHROPIC_MODEL,
             max_tokens: 1000,
             temperature: temperature,
             system: systemPrompt,
-            messages: userConversation.messages.slice(-10)
+            messages: userConversation.messages.slice(-10),
         });
 
+        // Process the response
         const processedResponse = processResponse(response);
 
+        // Update conversation history
         userConversation.messages.push({ role: 'assistant', content: processedResponse });
         userConversation.userData.lastResponse = processedResponse;
 
+        // Track response variety
         trackResponseVariety(userConversation.userData, processedResponse);
+
+        // Reset forced variation flag
         userConversation.userData.forcedVariation = false;
 
+        logger.info('Response sent to user', { userId, response: processedResponse });
         res.json({ response: processedResponse });
     } catch (error) {
         handleError(res, error);
@@ -281,7 +415,11 @@ app.post('/api/chat', async (req, res) => {
  * Health check endpoint
  */
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'healthy', uptime: process.uptime(), timestamp: Date.now() });
+    res.json({
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: Date.now(),
+    });
 });
 
 /**
@@ -289,7 +427,9 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/api/stats/:userId', (req, res) => {
     const { userId } = req.params;
+
     if (!conversations[userId]) {
+        logger.warn('User not found for stats', { userId });
         return res.status(404).json({ error: 'User not found' });
     }
 
@@ -298,13 +438,14 @@ app.get('/api/stats/:userId', (req, res) => {
         messageCount: userConversation.messages.length,
         topicsDiscussed: userConversation.userData.topicsDiscussed,
         sessionDuration: Math.floor((Date.now() - userConversation.userData.conversationStarted) / 1000),
-        currentState: userConversation.userData.emotionalState
+        currentState: userConversation.userData.emotionalState,
     };
 
     res.json(stats);
 });
 
 // ========== Advanced Functions ==========
+
 /**
  * Checks for repetitive responses
  */
@@ -349,6 +490,7 @@ function trackResponseVariety(userData, response) {
     if (!userData.responseVariety) {
         userData.responseVariety = [];
     }
+
     userData.responseVariety.push(response);
 
     if (userData.responseVariety.length > 10) {
@@ -357,17 +499,18 @@ function trackResponseVariety(userData, response) {
 }
 
 // ========== Server Initialization ==========
-const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-    console.log(`ROY is listening on port ${PORT}`);
-    console.log(`Server started at ${new Date().toISOString()}`);
+
+// Start the server and store the server instance
+const server = app.listen(env.PORT, () => {
+    logger.info(`ROY is listening on port ${env.PORT}`);
+    logger.info(`Server started at ${new Date().toISOString()}`);
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('SIGTERM received. Shutting down gracefully...');
+    logger.info('SIGTERM received. Shutting down gracefully...');
     server.close(() => {
-        console.log('Server closed');
+        logger.info('Server closed');
         process.exit(0);
     });
 });
