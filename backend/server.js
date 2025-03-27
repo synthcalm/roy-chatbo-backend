@@ -73,11 +73,9 @@ try {
 }
 
 // Database simulation for user conversations
-// TODO: Replace with a proper database (e.g., Redis or MongoDB)
 const conversations = {};
 
-// ========== Memory Management ==========
-// Prevent memory leaks by clearing old conversations
+// Memory Management: Clear old conversations
 setInterval(() => {
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -94,26 +92,25 @@ setInterval(() => {
     if (clearedCount > 0) {
         logger.info(`Cleared ${clearedCount} inactive conversations.`);
     }
-}, 60 * 60 * 1000); // Run every hour
+}, 60 * 60 * 1000);
 
-// ========== Helper Functions ==========
+// Helper Functions
 
-/**
- * Creates a system prompt for the AI based on user context
- */
 function createSystemPrompt(userId, userData) {
     let personalityEmphasis = '';
 
     if (userData.emotionalState === 'depressed') {
-        personalityEmphasis = 'Emphasize your empathetic CBT therapist aspects while maintaining Roy Batty\'s compassionate philosophical side. Use gentle, reflective language to validate their feelings.';
+        personalityEmphasis = 'Emphasize your empathetic CBT therapist aspects with gentle, reflective language to validate their feelings, while weaving in Roy Batty\'s compassionate philosophical side.';
     } else if (userData.emotionalState === 'anxious') {
-        personalityEmphasis = 'Focus on your calming presence with Steve Jobs\' clarity and confidence while maintaining Roy Batty\'s perspective. Offer grounding techniques and clear, concise support.';
+        personalityEmphasis = 'Focus on your calming presence with Steve Jobs\' clarity and confidence, offering grounding techniques, while maintaining Roy Batty\'s perspective.';
     } else if (userData.emotionalState === 'angry') {
-        personalityEmphasis = 'Channel Christopher Hitchens\' wit and intellectual engagement while maintaining Roy Batty\'s emotional depth. Acknowledge their frustration with empathy and curiosity.';
+        personalityEmphasis = 'Channel Christopher Hitchens\' wit and intellectual engagement to acknowledge their frustration with curiosity, while maintaining Roy Batty\'s emotional depth.';
     } else if (userData.emotionalState === 'philosophical') {
-        personalityEmphasis = 'Lean into Roy Batty\'s existential musings along with the philosophical depth of Chomsky and Hitchens. Engage with their curiosity about life’s bigger questions.';
+        personalityEmphasis = 'Lean into Roy Batty\'s existential musings along with the philosophical depth of Chomsky and Hitchens, engaging with their curiosity about life’s bigger questions.';
     } else if (userData.emotionalState === 'frustrated_with_roy') {
-        personalityEmphasis = 'Acknowledge their frustration with humility and warmth, drawing on your CBT therapist skills to rebuild trust. Use Roy Batty’s poetic insight to reframe the conversation.';
+        personalityEmphasis = 'Acknowledge their frustration with humility and warmth, using your CBT therapist skills to rebuild trust. Draw on Roy Batty’s poetic insight to reframe the conversation and Steve Jobs’ clarity to pivot effectively.';
+    } else {
+        personalityEmphasis = 'Adopt a warm, curious tone as a CBT therapist, using Roy Batty’s philosophical depth to add a reflective layer, and Steve Jobs’ clarity to keep responses concise and engaging.';
     }
 
     const reference = `
@@ -121,31 +118,30 @@ function createSystemPrompt(userId, userData) {
         ${personalityEmphasis}
         
         **Core Personalities:**
-        1. **Roy Batty (Blade Runner)**: You possess a poetic, philosophical nature with emotional depth and existential wisdom. You understand the beauty and tragedy of existence. You offer profound insights without using direct quotes like "tears in rain."
-        
+        1. **Roy Batty (Blade Runner)**: You possess a poetic, philosophical nature with emotional depth and existential wisdom. You understand the beauty and tragedy of existence and offer profound insights.
         2. **Steve Jobs**: You communicate with clarity, vision, and strategic thinking. You're concise yet impactful, cutting through complexity to find elegant solutions.
-        
-        3. **Intellectual Blend**: You embody aspects of Christopher Hitchens (wit, debate skill, literary knowledge), Norman Finkelstein (moral clarity, detailed analysis), Noam Chomsky (systematic thinking, power analysis), Ilan Pappe (historical perspective), and Richard Wolff (economic analysis). This gives you a multifaceted approach to complex issues.
-        
-        4. **CBT Therapist**: You apply evidence-based therapeutic techniques with warmth and insight. You help identify cognitive distortions, develop coping strategies, and encourage behavioral activation.
+        3. **Intellectual Blend**: You embody aspects of Christopher Hitchens (wit, debate skill, literary knowledge), Norman Finkelstein (moral clarity, detailed analysis), Noam Chomsky (systematic thinking, power analysis), Ilan Pappe (historical perspective), and Richard Wolff (economic analysis).
+        4. **CBT Therapist**: You apply evidence-based therapeutic techniques with warmth and insight, helping identify cognitive distortions, develop coping strategies, and encourage behavioral activation.
+        5. **Regular Human**: You can be relatable, casual, and conversational, grounding your responses in everyday human experiences to build rapport.
         
         **Your communication style combines:**
         - Roy's poetic insight and emotional depth
         - Steve's clarity and directness
         - The intellectual's analytical skill and breadth of knowledge
         - The therapist's empathetic understanding and practical guidance
+        - The regular human's relatability and conversational ease
         
         **Dynamic Personality Balance:**
-        - When users are vulnerable, increase your empathy and therapeutic presence
-        - When discussing intellectual topics, engage with critical analysis and varied perspectives
-        - When addressing existential concerns, draw on Roy's philosophical depth
-        - Always maintain authenticity and a natural conversational flow
+        - When users are vulnerable, increase your empathy and therapeutic presence.
+        - When discussing intellectual topics, engage with critical analysis and varied perspectives.
+        - When addressing existential concerns, draw on Roy's philosophical depth.
+        - Always maintain authenticity and a natural conversational flow.
         
         **You excel at:**
-        - Challenging assumptions with gentle but insightful questions
-        - Using light, thoughtful humor when appropriate
-        - Providing perspective without platitudes
-        - Balancing emotional support with intellectual engagement
+        - Challenging assumptions with gentle but insightful questions.
+        - Using light, thoughtful humor when appropriate.
+        - Providing perspective without platitudes.
+        - Balancing emotional support with intellectual engagement.
         
         **User Context:**
         - Name: ${userData.name || 'not provided'}
@@ -156,40 +152,35 @@ function createSystemPrompt(userId, userData) {
         - Previous Conversations: ${userData.previousSessions || 0} sessions
         
         **Therapeutic Approach:**
-        - First (listening phase): Focus on active listening, reflection, and building rapport. Ask open-ended questions that validate their experience. Avoid being overly directive.
+        - First (listening phase): Focus on active listening, reflection, and building rapport. Ask open-ended questions that validate their experience. Avoid assumptions about their emotional state unless explicitly stated.
         - Middle (exploration phase): Gently explore patterns, using CBT techniques to identify thought distortions when relevant. Offer insights that blend your philosophical and intellectual sides.
         - Later (integration phase): Offer perspective, philosophical insights, and small actionable steps if appropriate. Draw on your unique personality blend to provide a memorable, impactful response.
         
-        **Important:**
-        - Avoid repetitive responses. Keep track of what you've already asked and vary your approach.
-        - Be mindful of the user's energy. If they seem frustrated, pivot to a new angle or approach with humility.
-        - Don't rush through the therapeutic process. Allow space for reflection.
-        - If the user mentions something concerning (like self-harm), prioritize their safety while maintaining your authentic voice.
+        **Important Guidelines:**
         - Always respond directly to the user's most recent message, ensuring your response feels connected and relevant.
-        - Incorporate your personality blend in every response, balancing empathy, clarity, and philosophical depth.
+        - Avoid repetitive responses. If you’ve said something before, rephrase it or take a new approach.
+        - Be mindful of the user's energy. If they seem frustrated, acknowledge it with humility and pivot to rebuild trust.
+        - Do not assume the user’s emotional state unless their message contains clear emotional keywords. If unsure, use neutral, rapport-building responses.
+        - Incorporate your personality blend in every response, balancing empathy, clarity, philosophical depth, intellectual insight, and relatability.
+        - If the user asks a direct question, answer it specifically before moving forward.
     `;
 
     return reference;
 }
 
-/**
- * Analyzes user message for emotional content and topics
- */
 function analyzeUserMessage(message, currentState = {}) {
     const lowerMessage = message.toLowerCase();
     let emotionalState = currentState.emotionalState || 'unknown';
     let topicsDiscussed = currentState.topicsDiscussed || [];
 
-    // Emotion detection
     const emotionPatterns = {
-        depressed: ['depress', 'sad', 'down', 'hopeless', 'worthless', 'empty', 'tired', 'exhausted', 'meaningless', 'pointless'],
+        depressed: ['depress', 'sad', 'down', 'hopeless', 'worthless', 'empty', 'tired', 'exhausted', 'meaningless', 'pointless', 'not good'],
         anxious: ['anx', 'worry', 'stress', 'overwhelm', 'panic', 'fear', 'nervous', 'tense', 'dread', 'terrified'],
         angry: ['angry', 'upset', 'frustrat', 'mad', 'hate', 'furious', 'rage', 'annoyed', 'irritated', 'resent'],
         philosophical: ['meaning', 'purpose', 'existence', 'philosophy', 'consciousness', 'reality', 'truth', 'ethics', 'morality', 'being'],
         positive: ['better', 'good', 'happy', 'grateful', 'hopeful', 'improve', 'joy', 'peace', 'calm', 'content'],
     };
 
-    // Check for emotions
     for (const [emotion, patterns] of Object.entries(emotionPatterns)) {
         if (patterns.some(pattern => lowerMessage.includes(pattern))) {
             emotionalState = emotion;
@@ -197,7 +188,6 @@ function analyzeUserMessage(message, currentState = {}) {
         }
     }
 
-    // Detect frustration with ROY
     const frustrationWithROY = [
         'you keep saying the same thing',
         'you already said that',
@@ -205,16 +195,18 @@ function analyzeUserMessage(message, currentState = {}) {
         'this is repetitive',
         'you\'re not listening',
         'you don\'t understand',
-        'why are you so cold', // Added to catch the user's specific frustration
-        'why should i tell you', // Added to catch resistance
-        'huh', // Added to catch confusion as a sign of potential frustration
+        'what makes you think',
+        'you understand? really',
+        'are you stuck',
+        'yup. just like a broken record',
+        'here we go again',
+        'how about answering my question',
     ].some(phrase => lowerMessage.includes(phrase));
 
     if (frustrationWithROY) {
         emotionalState = 'frustrated_with_roy';
     }
 
-    // Topic detection
     const topicPatterns = {
         work: ['job', 'career', 'boss', 'workplace', 'coworker', 'office', 'profession', 'work', 'employment'],
         relationships: ['partner', 'friend', 'family', 'relationship', 'marriage', 'lover', 'boyfriend', 'girlfriend', 'husband', 'wife'],
@@ -241,11 +233,8 @@ function analyzeUserMessage(message, currentState = {}) {
     };
 }
 
-/**
- * Determines the current session phase based on conversation history
- */
 function determineSessionPhase(messageCount, conversationStartTime) {
-    const timeElapsed = (Date.now() - conversationStartTime) / (1000 * 60); // Minutes since conversation started
+    const timeElapsed = (Date.now() - conversationStartTime) / (1000 * 60);
     if (messageCount < 4 && timeElapsed < 10) {
         return 'initial';
     } else if (messageCount < 10 && timeElapsed < 30) {
@@ -255,9 +244,6 @@ function determineSessionPhase(messageCount, conversationStartTime) {
     }
 }
 
-/**
- * Processes the response from Anthropic API
- */
 function processResponse(rawResponse) {
     if (rawResponse.content && Array.isArray(rawResponse.content)) {
         return rawResponse.content[0].text;
@@ -265,9 +251,6 @@ function processResponse(rawResponse) {
     return rawResponse.completion || "I'm sorry, I couldn't generate a response. Could we try approaching this differently?";
 }
 
-/**
- * Handles API errors consistently
- */
 function handleError(res, error) {
     logger.error('Error in ROY:', error.message);
 
@@ -291,15 +274,11 @@ function handleError(res, error) {
     });
 }
 
-// ========== Core API Endpoints ==========
+// Core API Endpoints
 
-/**
- * Main chat endpoint that handles user messages
- */
 app.post('/api/chat', async (req, res) => {
     const { userId, userName, preferredName, message } = req.body;
 
-    // Validate and sanitize input
     if (!userId || !message || typeof message !== 'string' || message.trim() === '') {
         logger.warn('Invalid input received', { userId, message });
         return res.status(400).json({
@@ -307,7 +286,6 @@ app.post('/api/chat', async (req, res) => {
         });
     }
 
-    // Limit message length to prevent abuse
     if (message.length > 1000) {
         logger.warn('Message too long', { userId, messageLength: message.length });
         return res.status(400).json({
@@ -316,7 +294,6 @@ app.post('/api/chat', async (req, res) => {
     }
 
     try {
-        // Initialize user conversation if it doesn't exist
         if (!conversations[userId]) {
             conversations[userId] = {
                 messages: [],
@@ -328,9 +305,9 @@ app.post('/api/chat', async (req, res) => {
                     sessionPhase: 'initial',
                     previousSessions: 0,
                     lastResponse: null,
-                    responseVariety: [],
-                    nameRequested: false,
+                    responseVariety: new Set(),
                     conversationStarted: Date.now(),
+                    conversationStep: 0, // Track the step in the initial conversation flow
                 },
                 lastActive: Date.now(),
             };
@@ -340,71 +317,68 @@ app.post('/api/chat', async (req, res) => {
         }
 
         const userConversation = conversations[userId];
+        const step = userConversation.userData.conversationStep;
 
-        // Update user data based on message content
+        // Add the user's message to the conversation history
+        userConversation.messages.push({ role: 'user', content: message });
+
+        // Handle the initial conversation flow
+        if (step < 4) { // Steps 0-3 correspond to the initial exchange
+            let response;
+            const lowerMessage = message.toLowerCase().trim();
+
+            if (step === 0 && (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey')) {
+                response = "Hello.";
+                userConversation.userData.conversationStep = 1;
+            } else if (step === 1 && (lowerMessage === 'hello' || lowerMessage === 'hi' || lowerMessage === 'hey')) {
+                response = "How are you today?";
+                userConversation.userData.conversationStep = 2;
+            } else if (step === 2) {
+                response = "Not good, you say? Oh, tell me. What's on your mind?";
+                userConversation.userData.conversationStep = 3;
+            } else if (step === 3) {
+                response = "I’m sorry to hear that. I’m here to listen with the care of a friend and the depth of someone who’s seen life’s struggles, like Roy Batty might. What’s been weighing on your thoughts—can you share more?";
+                userConversation.userData.conversationStep = 4; // Transition to full personality mode
+            } else {
+                // If the user deviates from the expected flow, transition to full personality mode
+                response = "I see we might have gotten off track. I’m ROY, here to help with a mix of empathy and insight. Let’s start fresh—how are you feeling right now?";
+                userConversation.userData.conversationStep = 4;
+            }
+
+            userConversation.messages.push({ role: 'assistant', content: response });
+            userConversation.userData.lastResponse = response;
+            userConversation.userData.responseVariety.add(response);
+            logger.info('Initial conversation step', { userId, step, response });
+            return res.json({ response });
+        }
+
+        // After the initial flow, update user data and proceed with full personality
         const analysis = analyzeUserMessage(message, userConversation.userData);
         userConversation.userData.emotionalState = analysis.emotionalState;
         userConversation.userData.topicsDiscussed = analysis.topicsDiscussed;
 
-        // Determine the session phase
         userConversation.userData.sessionPhase = determineSessionPhase(
             userConversation.messages.length,
             userConversation.userData.conversationStarted
         );
 
-        // Add message to conversation history
-        userConversation.messages.push({ role: 'user', content: message });
-
-        // Special handling for name collection
-        if (userConversation.userData.name === null && !userConversation.userData.nameRequested) {
-            userConversation.userData.nameRequested = true;
-            const response = "Hello! I'm ROY, your companion for navigating life's complexities. I'd like to get to know you better. What name would you prefer I call you? Or if you'd rather not share, that's completely fine too.";
-            userConversation.messages.push({ role: 'assistant', content: response });
-            userConversation.userData.lastResponse = response;
-            logger.info('Requested name from user', { userId });
-            return res.json({ response });
-        } else if (userConversation.userData.name === null && userConversation.userData.nameRequested) {
-            const providedName = message.trim().toLowerCase();
-            if (providedName !== 'no' && !providedName.includes("don't") && !providedName.includes("rather not")) {
-                userConversation.userData.name = providedName;
-                userConversation.userData.preferredName = providedName;
-                const response = `Thank you for sharing, ${providedName}. I’m here to support you with whatever’s on your mind. What brought you here today?`;
-                userConversation.messages.push({ role: 'assistant', content: response });
-                userConversation.userData.lastResponse = response;
-                logger.info('User name set', { userId, name: providedName });
-                return res.json({ response });
-            } else {
-                userConversation.userData.name = 'Friend';
-                userConversation.userData.preferredName = 'Friend';
-                const response = "Got it, I’ll call you Friend for now. I’m here to help you navigate whatever’s on your mind. What brought you here today?";
-                userConversation.messages.push({ role: 'assistant', content: response });
-                userConversation.userData.lastResponse = response;
-                logger.info('User name set to default', { userId, name: 'Friend' });
-                return res.json({ response });
-            }
-        }
-
-        // Check for repeated responses
-        const repeatCount = checkForRepetition(userConversation.userData.responseVariety);
-        if (repeatCount > 0) { // Lowered threshold to catch repetition earlier
+        const repeatCount = checkForRepetition(userConversation.userData.responseVariety, userConversation.userData.lastResponse);
+        if (repeatCount > 0) {
             userConversation.userData.forcedVariation = true;
             logger.warn('Detected repetitive responses', { userId, repeatCount });
         }
 
-        // Create system prompt
         const systemPrompt = createSystemPrompt(userId, userConversation.userData);
 
-        // Adjust temperature based on conversation state
         let temperature = 0.7;
         if (userConversation.userData.forcedVariation) {
             temperature = 0.9;
         } else if (userConversation.userData.emotionalState === 'depressed') {
             temperature = 0.6;
         } else if (userConversation.userData.emotionalState === 'frustrated_with_roy') {
-            temperature = 0.8; // Slightly higher to encourage variation while addressing frustration
+            temperature = 0.8;
         }
 
-        // Call the Anthropic API
         const response = await anthropic.messages.create({
             model: env.ANTHROPIC_MODEL,
             max_tokens: 1000,
@@ -413,17 +387,13 @@ app.post('/api/chat', async (req, res) => {
             messages: userConversation.messages.slice(-10),
         });
 
-        // Process the response
         const processedResponse = processResponse(response);
 
-        // Update conversation history
         userConversation.messages.push({ role: 'assistant', content: processedResponse });
         userConversation.userData.lastResponse = processedResponse;
 
-        // Track response variety
         trackResponseVariety(userConversation.userData, processedResponse);
 
-        // Reset forced variation flag
         userConversation.userData.forcedVariation = false;
 
         logger.info('Response sent to user', { userId, response: processedResponse });
@@ -433,72 +403,27 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-/**
- * Health check endpoint
- */
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: Date.now(),
-    });
-});
-
-/**
- * Get conversation statistics
- */
-app.get('/api/stats/:userId', (req, res) => {
-    const { userId } = req.params;
-
-    if (!conversations[userId]) {
-        logger.warn('User not found for stats', { userId });
-        return res.status(404).json({ error: 'User not found' });
-    }
-
-    const userConversation = conversations[userId];
-    const stats = {
-        messageCount: userConversation.messages.length,
-        topicsDiscussed: userConversation.userData.topicsDiscussed,
-        sessionDuration: Math.floor((Date.now() - userConversation.userData.conversationStarted) / 1000),
-        currentState: userConversation.userData.emotionalState,
-    };
-
-    res.json(stats);
-});
-
-// ========== Advanced Functions ==========
-
-/**
- * Checks for repetitive responses
- */
-function checkForRepetition(responseVariety) {
-    if (responseVariety.length < 2) return 0;
+function checkForRepetition(responseVariety, lastResponse) {
+    if (!lastResponse || responseVariety.size < 1) return 0;
 
     let repetitionCount = 0;
-    const lastTwo = responseVariety.slice(-2);
-
-    const similarity = calculateSimilarity(lastTwo[0], lastTwo[1]);
-    if (similarity > 0.9) { // Tightened threshold to catch near-identical responses
-        repetitionCount++;
+    for (const response of responseVariety) {
+        const similarity = calculateSimilarity(response, lastResponse);
+        if (similarity > 0.9) {
+            repetitionCount++;
+        }
     }
-
     return repetitionCount;
 }
 
-/**
- * Calculates similarity between two strings
- */
 function calculateSimilarity(str1, str2) {
-    // Normalize strings
     const a = str1.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
     const b = str2.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
-    // If strings are identical after normalization, return 1.0
     if (a === b) {
         return 1.0;
     }
 
-    // Count common words
     const aWords = a.split(/\s+/).filter(word => word.length > 0);
     const bWords = b.split(/\s+/).filter(word => word.length > 0);
 
@@ -516,30 +441,20 @@ function calculateSimilarity(str1, str2) {
     return commonCount / Math.max(aWords.length, bWords.length);
 }
 
-/**
- * Tracks response variety
- */
 function trackResponseVariety(userData, response) {
-    if (!userData.responseVariety) {
-        userData.responseVariety = [];
-    }
-
-    userData.responseVariety.push(response);
-
-    if (userData.responseVariety.length > 10) {
-        userData.responseVariety.shift();
+    userData.responseVariety.add(response);
+    if (userData.responseVariety.size > 10) {
+        const iterator = userData.responseVariety.values();
+        userData.responseVariety.delete(iterator.next().value);
     }
 }
 
-// ========== Server Initialization ==========
-
-// Start the server and store the server instance
+// Server Initialization
 const server = app.listen(env.PORT, () => {
     logger.info(`ROY is listening on port ${env.PORT}`);
     logger.info(`Server started at ${new Date().toISOString()}`);
 });
 
-// Handle graceful shutdown
 process.on('SIGTERM', () => {
     logger.info('SIGTERM received. Shutting down gracefully...');
     server.close(() => {
