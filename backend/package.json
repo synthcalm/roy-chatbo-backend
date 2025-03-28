@@ -1,6 +1,8 @@
-"dependencies": {
-  "@anthropic-ai/sdk": "^0.7.0",  // Official Anthropic client library
-  "cors": "^2.8.5",               // Handles Cross-Origin Resource Sharing
-  "dotenv": "^16.3.1",            // Loads environment variables from .env file
-  "express": "^4.18.2"            // Web framework for Node.js
+{
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.7.0",
+    "cors": "2.8.5",
+    "dotenv": "16.3.1",
+    "express": "4.18.2"
+  }
 }
