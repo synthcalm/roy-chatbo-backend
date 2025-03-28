@@ -1,48 +1,46 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
-const bodyParser = require('body-parser');
-const { Anthropic } = require('@anthropic-ai/sdk');
-
-dotenv.config();
+const { Anthropic } = require('@anthropic-ai/sdk'); // Or your AI service SDK
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Correct CORS configuration
-app.use(cors({
-    origin: 'https://synthcalm.com', // Allow requests from your Hostinger site
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-}));
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
+// Health check
 app.get('/', (req, res) => {
-    res.json({
-        message: 'ROY Therapeutic Chatbot Backend',
-        status: 'Running'
-    });
+    res.send('Roy Chatbot Backend is Running');
 });
 
+// Chat endpoint
 app.post('/chat', async (req, res) => {
     try {
-        const userMessage = req.body.message;
-        const completion = await anthropic.completions.create({
-            model: 'claude-2',
-            max_tokens_to_sample: 300,
-            prompt: `Human: ${userMessage}\n\nAssistant:`,
+        const { message } = req.body;
+        
+        // Replace with your actual AI service call
+        const mockResponse = `Roy: I received your message: "${message}"`;
+        
+        // If using Anthropic:
+        // const anthropic = new Anthropic(process.env.ANTHROPIC_API_KEY);
+        // const response = await anthropic.messages.create({...});
+        
+        res.json({ 
+            response: mockResponse,
+            status: 'success'
         });
-        res.json({ response: completion.completion });
     } catch (error) {
-        console.error('Anthropic API Error:', error);
-        res.status(500).json({ error: 'An error occurred while processing your request.' });
+        console.error('Chat error:', error);
+        res.status(500).json({ 
+            error: "Roy is having technical difficulties",
+            status: 'error'
+        });
     }
 });
 
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Node.js version: ${process.version}`);
