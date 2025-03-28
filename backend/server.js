@@ -7,27 +7,34 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // Enhanced CORS configuration
-app.use(cors({
-  origin: [
-    'https://synthealm.com', // Your frontend domain
-    'http://localhost',      // For local testing
-    '*'                      // Temporary broad access
-  ],
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow all origins for now (replace with your frontend URL in production)
+    callback(null, true);
+    
+    // For production, use something like:
+    // const allowedOrigins = ['https://your-frontend-domain.com'];
+    // if (!origin || allowedOrigins.includes(origin)) {
+    //   callback(null, true);
+    // } else {
+    //   callback(new Error('Not allowed by CORS'));
+    // }
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
-}));
+};
 
-// Pre-flight requests
-app.options('*', cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
 
 // Middleware
 app.use(express.json());
 
 // Health endpoint
 app.get('/', (req, res) => {
-  res.json({ 
-    status: 'live', 
+  res.json({
+    status: 'live',
     service: 'Roy Chatbot Backend',
     timestamp: new Date().toISOString()
   });
@@ -36,28 +43,31 @@ app.get('/', (req, res) => {
 // Chat endpoint
 app.post('/chat', async (req, res) => {
   try {
-    console.log('Received message:', req.body.message);
+    const { message } = req.body;
     
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
     const anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    const response = await anthropic.messages.create({
+    const msg = await anthropic.messages.create({
       model: "claude-3-opus-20240229",
       max_tokens: 1000,
-      messages: [{ role: "user", content: req.body.message }]
+      messages: [{ role: "user", content: message }]
     });
 
-    const reply = response.content[0]?.text || "I didn't understand that";
-    console.log('Sending reply:', reply);
+    const response = msg.content[0]?.text || "I didn't understand that";
     
     res.json({
-      response: reply,
+      response,
       status: 'success'
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Chat error:', error);
     res.status(500).json({
       error: "Service temporarily unavailable",
       status: 'error'
@@ -68,6 +78,6 @@ app.post('/chat', async (req, res) => {
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌐 External: https://toy-chatbo-backend.onrender.com`);
-  console.log(`🔑 Anthropic: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'MISSING'}`);
+  console.log(`🌐 External URL: https://toy-chatbo-backend.onrender.com`);
+  console.log(`🔑 Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Missing'}`);
 });
