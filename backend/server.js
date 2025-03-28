@@ -7,10 +7,7 @@ app.use(express.json());
 
 app.post('/', (req, res) => {
   const { message } = req.body;
-  
-  // Simple response logic (replace with more complex logic later)
   const response = `You said: ${message}. Nice to meet you!`;
-  
   res.json({ response });
 });
 
