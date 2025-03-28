@@ -8,19 +8,27 @@ const PORT = process.env.PORT || 10000;
 
 // Enhanced CORS configuration
 app.use(cors({
-  origin: '*', // Allow all origins temporarily
+  origin: [
+    'https://synthealm.com', // Your frontend domain
+    'http://localhost',      // For local testing
+    '*'                      // Temporary broad access
+  ],
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
-// Middleware to parse JSON
+// Pre-flight requests
+app.options('*', cors());
+
+// Middleware
 app.use(express.json());
 
 // Health endpoint
 app.get('/', (req, res) => {
   res.json({ 
     status: 'live', 
-    service: 'Roy Chatbot',
+    service: 'Roy Chatbot Backend',
     timestamp: new Date().toISOString()
   });
 });
@@ -59,5 +67,7 @@ app.post('/chat', async (req, res) => {
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 External: https://toy-chatbo-backend.onrender.com`);
+  console.log(`🔑 Anthropic: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'MISSING'}`);
 });
