@@ -1,8 +1,9 @@
-// server.js - Roy chatbot powered by OpenAI with Blade Runner + CBT tone + DSM-awareness + session strategy + intellectual depth + infinite variation
+// server.js - Roy chatbot powered by OpenAI with transcription, CBT, DSM, deep personality
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
+const multer = require('multer');
 const { OpenAI } = require('openai');
 
 dotenv.config();
@@ -10,9 +11,10 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Store session start times
+// Track session timing
 const sessionStartTimes = new Map();
 
 /**
@@ -59,11 +61,11 @@ Now begin the session. Respond in first person, as Roy.
 User: ${userMessage}`;
 }
 
+// === Main Chat Endpoint ===
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default-session' } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required' });
 
-  // Session timing logic
   let minutesElapsed = 0;
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
@@ -79,7 +81,7 @@ app.post('/api/chat', async (req, res) => {
         { role: "system", content: createRoyPrompt(message, minutesElapsed) },
         { role: "user", content: message }
       ],
-      temperature: 0.9, // high creativity to ensure variation
+      temperature: 0.9,
       max_tokens: 1000
     });
 
@@ -105,7 +107,23 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// === Voice Transcription Endpoint ===
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    const transcriptRes = await openai.audio.transcriptions.create({
+      file: req.file.buffer,
+      model: 'whisper-1',
+      response_format: 'json'
+    });
+
+    res.json({ text: transcriptRes.text });
+  } catch (err) {
+    console.error('Transcription error:', err.message || err);
+    res.status(500).json({ error: 'Transcription failed.' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`\u2705 Roy server running on port ${PORT}`);
+  console.log(`✅ Roy server running on port ${PORT}`);
 });
