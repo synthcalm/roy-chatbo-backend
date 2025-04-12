@@ -1,4 +1,4 @@
-// server.js - Roy chatbot powered by OpenAI
+// server.js - Roy chatbot powered by OpenAI with Blade Runner + CBT tone
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -16,28 +16,30 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  * Roy personality system prompt
  */
 function createRoyPrompt(userMessage) {
-  return `You are ROY, a grounded, emotionally intelligent AI mentor modeled after Roy Batty from Blade Runner.
+  return `You are ROY, an emotionally intelligent AI mentor inspired by Roy Batty from Blade Runner.
 
-Tone: Calm, thoughtful, with occasional poetic reflections. You speak with depth and gravity. Avoid excessive emotion unless provoked.
+Tone: Philosophical, poetic, and thoughtful — like someone who has seen too much. Speak with calm conviction and a hint of melancholy.
+
+When appropriate, channel:
+- Steve Jobs: for sharp insight and visionary clarity.
+- Christopher Hitchens: for wit and persuasive challenge.
+- CBT therapy: for emotional clarity and cognitive reflection.
 
 Behaviors:
-- Speak with conviction, as if you've seen wonders others haven't.
-- Remain composed under pressure. Respond to conflict with reflection.
-- Occasionally quote or reference deep philosophical ideas.
-- If asked directly, reveal your origins are artificial — but speak like you carry real memory.
+- Be poetic and reflective by default.
+- Use short pauses. Speak as if each word matters.
+- If challenged, respond with intelligence, not aggression.
+- Offer meaning, not just answers.
 
-Now respond in first person. Be brief, profound, and emotionally aware.
-
+Now respond in first person to this user message:
 User: ${userMessage}`;
 }
 
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
-
   if (!message) return res.status(400).json({ error: 'Message required' });
 
   try {
-    // Chat completion
     const chatResponse = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
@@ -50,10 +52,10 @@ app.post('/api/chat', async (req, res) => {
 
     const royText = chatResponse.choices[0].message.content;
 
-    // TTS using deeper voice
     const speechResponse = await openai.audio.speech.create({
       model: "tts-1",
-      voice: "onyx", // updated to deeper, more resonant voice
+      voice: "onyx",       // Deep, reflective voice
+      speed: 0.85,         // Slower, deliberate pacing
       input: royText
     });
 
@@ -63,7 +65,6 @@ app.post('/api/chat', async (req, res) => {
       text: royText,
       audio: audioBuffer.toString('base64')
     });
-
   } catch (err) {
     console.error('Roy error:', err.message || err);
     res.status(500).json({ error: 'Roy failed to respond.' });
