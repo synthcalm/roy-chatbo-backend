@@ -1,4 +1,5 @@
-// server.js - Roy chatbot powered by OpenAI with transcription, CBT, DSM, deep personality
+// server.js – Roy chatbot with GPT-4, TTS, voice transcription, CBT, DSM-awareness
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -8,18 +9,17 @@ const { OpenAI } = require('openai');
 
 dotenv.config();
 const app = express();
+const upload = multer();
+
 app.use(cors());
 app.use(bodyParser.json());
 
-const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Track session timing
 const sessionStartTimes = new Map();
 
-/**
- * Roy personality system prompt
- */
+// Prompt generator
 function createRoyPrompt(userMessage, minutesElapsed) {
   let timeNote = '';
   if (minutesElapsed >= 55) {
@@ -58,10 +58,10 @@ BEHAVIORAL DIRECTIVE:
 - If insulted, read the emotion beneath. If challenged, spar respectfully. If lost, offer silence and presence.
 
 Now begin the session. Respond in first person, as Roy.
-User: ${userMessage}`;
+User: ${userMessage}${timeNote}`;
 }
 
-// === Main Chat Endpoint ===
+// === Chat endpoint ===
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default-session' } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required' });
@@ -76,10 +76,10 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const chatResponse = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: 'gpt-4',
       messages: [
-        { role: "system", content: createRoyPrompt(message, minutesElapsed) },
-        { role: "user", content: message }
+        { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
+        { role: 'user', content: message }
       ],
       temperature: 0.9,
       max_tokens: 1000
@@ -88,8 +88,8 @@ app.post('/api/chat', async (req, res) => {
     const royText = chatResponse.choices[0].message.content;
 
     const speechResponse = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "onyx",
+      model: 'tts-1',
+      voice: 'onyx',
       speed: 0.85,
       input: royText
     });
@@ -107,16 +107,17 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// === Voice Transcription Endpoint ===
+// === Transcription endpoint ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
-    const transcriptRes = await openai.audio.transcriptions.create({
-      file: req.file.buffer,
+    const fileBuffer = req.file.buffer;
+    const transcript = await openai.audio.transcriptions.create({
+      file: fileBuffer,
       model: 'whisper-1',
       response_format: 'json'
     });
 
-    res.json({ text: transcriptRes.text });
+    res.json({ text: transcript.text });
   } catch (err) {
     console.error('Transcription error:', err.message || err);
     res.status(500).json({ error: 'Transcription failed.' });
