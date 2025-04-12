@@ -5,6 +5,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { OpenAI } = require('openai');
 
 dotenv.config();
@@ -110,13 +113,18 @@ app.post('/api/chat', async (req, res) => {
 // === Transcription endpoint ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
-    const fileBuffer = req.file.buffer;
+    if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
+
+    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.webm`);
+    fs.writeFileSync(tempPath, req.file.buffer);
+
     const transcript = await openai.audio.transcriptions.create({
-      file: fileBuffer,
+      file: fs.createReadStream(tempPath),
       model: 'whisper-1',
       response_format: 'json'
     });
 
+    fs.unlinkSync(tempPath);
     res.json({ text: transcript.text });
   } catch (err) {
     console.error('Transcription error:', err.message || err);
