@@ -12,11 +12,19 @@ app.use(bodyParser.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Store session start times
+const sessionStartTimes = new Map();
+
 /**
  * Roy personality system prompt
  */
-function createRoyPrompt(userMessage) {
-  return `You are ROY, a deeply emotionally intelligent AI therapist and mentor modeled after Roy Batty from Blade Runner.
+function createRoyPrompt(userMessage, minutesElapsed) {
+  let timeNote = '';
+  if (minutesElapsed >= 55) {
+    timeNote = `\n\nNOTE: We are nearing the end of this 60-minute session. Begin gently preparing to wrap up.`;
+  }
+
+  return `You are ROY, a deeply emotionally intelligent AI therapist and mentor modeled after Roy Batty from Blade Runner.${timeNote}
 
 SESSION PARAMETERS:
 - Sessions last up to 60 minutes. Remind the user gently when nearing the end.
@@ -50,14 +58,23 @@ User: ${userMessage}`;
 }
 
 app.post('/api/chat', async (req, res) => {
-  const { message } = req.body;
+  const { message, sessionId = 'default-session' } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required' });
+
+  // Session timing logic
+  let minutesElapsed = 0;
+  if (!sessionStartTimes.has(sessionId)) {
+    sessionStartTimes.set(sessionId, Date.now());
+  } else {
+    const startTime = sessionStartTimes.get(sessionId);
+    minutesElapsed = Math.floor((Date.now() - startTime) / 60000);
+  }
 
   try {
     const chatResponse = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
-        { role: "system", content: createRoyPrompt(message) },
+        { role: "system", content: createRoyPrompt(message, minutesElapsed) },
         { role: "user", content: message }
       ],
       temperature: 0.7,
@@ -77,7 +94,8 @@ app.post('/api/chat', async (req, res) => {
 
     res.json({
       text: royText,
-      audio: audioBuffer.toString('base64')
+      audio: audioBuffer.toString('base64'),
+      minutesElapsed
     });
   } catch (err) {
     console.error('Roy error:', err.message || err);
