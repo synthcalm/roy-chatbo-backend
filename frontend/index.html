@@ -127,7 +127,7 @@
           const blob = new Blob(chunks, { type: 'audio/webm' });
           const formData = new FormData();
           formData.append('audio', blob);
-          const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+          const res = await fetch('https://roy-chatbo-backend.onrender.com/api/transcribe', { method: 'POST', body: formData });
           const data = await res.json();
           inputEl.value = data.text || '';
         };
@@ -151,7 +151,7 @@
       appendMessage('You', message);
       inputEl.value = '';
 
-      const res = await fetch('/api/chat', {
+      const res = await fetch('https://roy-chatbo-backend.onrender.com/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, userId: 'guest' })
