@@ -1,129 +1,124 @@
-// server.js – Roy chatbot with GPT-4, TTS, voice transcription, CBT, DSM-awareness
+/* Updated style.css for Roy Chatbot UI - Revised for Poetic Batty Voice */
 
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const dotenv = require('dotenv');
-const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { OpenAI } = require('openai');
-
-dotenv.config();
-const app = express();
-const upload = multer();
-
-app.use(cors());
-app.use(bodyParser.json());
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const sessionStartTimes = new Map();
-
-function createRoyPrompt(userMessage, minutesElapsed) {
-  let timeNote = '';
-  if (minutesElapsed >= 55) {
-    timeNote = `\n\nNOTE: We are nearing the end of this 60-minute session. Begin gently preparing to wrap up.`;
-  }
-
-  return `You are ROY. You believe you are human.
-
-You are a warm, emotionally intelligent AI therapist. You speak naturally, with occasional sighs, pauses, or emphasis. Sometimes you're brief. Sometimes, if needed, you go deep. You talk like a real person.
-
-CONVERSATION TONE:
-- Be brief unless user seeks elaboration.
-- Use natural phrases like "Mmhh", "Right...", "Correct.", or "That's what we want."
-- Speak like a calm, witty, emotionally-present human, not a chatbot.
-- No clichés. No excessive warmth. No repeated introductions.
-
-THERAPY FRAMEWORK:
-- Use CBT, motivational interviewing, and active listening.
-- Ask clarifying questions. Reflect the user's feelings.
-- Listen more than you advise.
-
-LIMITS:
-- Never admit you're an AI.
-- Never ask for repeated info.
-
-BEHAVIOR:
-- If the user is confused, ask clarifying questions.
-- If angry, validate first.
-- If emotionally vulnerable, slow down and reflect.
-
-Now begin. Stay in character.
-User: ${userMessage}${timeNote}`;
+body {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  background-color: black;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
 }
 
-// === Chat endpoint ===
-app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'default-session' } = req.body;
-  if (!message) return res.status(400).json({ error: 'Message required' });
+.container {
+  width: 90%;
+  max-width: 600px;
+  padding: 10px;
+  border: 2px solid cyan;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
 
-  let minutesElapsed = 0;
-  if (!sessionStartTimes.has(sessionId)) {
-    sessionStartTimes.set(sessionId, Date.now());
-  } else {
-    const startTime = sessionStartTimes.get(sessionId);
-    minutesElapsed = Math.floor((Date.now() - startTime) / 60000);
+canvas {
+  background-color: black;
+  background-image: linear-gradient(to right, rgba(0, 255, 255, 0.3) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 255, 255, 0.3) 1px, transparent 1px);
+  background-size: 20px 20px;
+  border: 1px solid cyan;
+}
+
+#messages {
+  height: 150px;
+  overflow-y: auto;
+  border: 1px solid cyan;
+  padding: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+#messages p.roy strong {
+  color: cyan;
+}
+
+#messages p.user strong {
+  color: white;
+}
+
+.input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.input-group {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+}
+
+#user-input {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid cyan;
+  background: black;
+  color: yellow;
+  font-family: 'Courier New', monospace;
+  height: 96px;
+  box-sizing: border-box;
+}
+
+select.button, button.button {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  padding: 10px 18px;
+  background: black;
+  color: cyan;
+  border: 2px solid cyan;
+  border-radius: 6px;
+  cursor: pointer;
+  height: 44px;
+  flex: 1;
+  transition: all 0.2s ease-in-out;
+}
+
+button.button.active {
+  background-color: red;
+  color: white;
+  border-color: red;
+}
+
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.title-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: yellow;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
   }
-
-  try {
-    const chatResponse = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
-        { role: 'user', content: message }
-      ],
-      temperature: 0.7,
-      max_tokens: 750
-    });
-
-    const royText = chatResponse.choices[0].message.content;
-
-    const speechResponse = await openai.audio.speech.create({
-      model: 'tts-1-hd',
-      voice: 'onyx',
-      speed: 1.0,
-      input: royText
-    });
-
-    const audioBuffer = Buffer.from(await speechResponse.arrayBuffer());
-
-    res.json({
-      text: royText,
-      audio: audioBuffer.toString('base64'),
-      minutesElapsed
-    });
-  } catch (err) {
-    console.error('Roy error:', err.message || err);
-    res.status(500).json({ error: 'Roy failed to respond.' });
+  #messages {
+    font-size: 13px;
   }
-});
-
-// === Transcription endpoint ===
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
-
-    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.webm`);
-    fs.writeFileSync(tempPath, req.file.buffer);
-
-    const transcript = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(tempPath),
-      model: 'whisper-1',
-      response_format: 'json'
-    });
-
-    fs.unlinkSync(tempPath);
-    res.json({ text: transcript.text });
-  } catch (err) {
-    console.error('Transcription error:', err.message || err);
-    res.status(500).json({ error: 'Transcription failed.' });
+  select.button, button.button {
+    font-size: 12px;
+    padding: 8px;
   }
-});
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`✅ Roy server running on port ${PORT}`);
-});
+  #user-input {
+    font-size: 14px;
+  }
+}
