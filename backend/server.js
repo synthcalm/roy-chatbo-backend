@@ -1,4 +1,4 @@
-// Complete server.js file for Roy (fully compatible with AssemblyAI + OpenAI + Supabase UI)
+// server.js – Roy Batty as poetic therapist with GPT-4 + TTS + Whisper + AssemblyAI Token
 
 const express = require('express');
 const cors = require('cors');
@@ -57,25 +57,6 @@ Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.
 `.trim();
 }
 
-// === GET AssemblyAI Token ===
-app.get('/api/assembly/token', async (req, res) => {
-  try {
-    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
-      headers: {
-        authorization: process.env.ASSEMBLYAI_API_KEY
-      }
-    });
-
-    if (!response.ok) throw new Error(`AssemblyAI responded with ${response.status}`);
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    console.error('Token fetch error:', err);
-    res.status(500).json({ error: 'Failed to get AssemblyAI token' });
-  }
-});
-
 // === /api/chat/text ===
 app.post('/api/chat/text', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
@@ -103,17 +84,17 @@ app.post('/api/chat/text', async (req, res) => {
     const royText = chat.choices[0].message.content;
     res.json({ text: royText });
   } catch (err) {
-    console.error('Roy text error:', err.message || err);
+    console.error('❌ Roy chat error:', err.message || err);
     res.status(500).json({ error: 'Roy failed to respond.' });
   }
 });
 
 // === /api/chat/audio ===
 app.post('/api/chat/audio', async (req, res) => {
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: 'Text required' });
-
   try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Text required for audio.' });
+
     const speech = await openai.audio.speech.create({
       model: 'tts-1-hd',
       voice: 'onyx',
@@ -124,8 +105,8 @@ app.post('/api/chat/audio', async (req, res) => {
     const audioBuffer = Buffer.from(await speech.arrayBuffer());
     res.json({ audio: audioBuffer.toString('base64') });
   } catch (err) {
-    console.error('Roy audio error:', err.message || err);
-    res.status(500).json({ error: 'Failed to synthesize voice' });
+    console.error('❌ Audio generation error:', err.message || err);
+    res.status(500).json({ error: 'Audio generation failed.' });
   }
 });
 
@@ -148,6 +129,24 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   } catch (err) {
     console.error('❌ Transcription error:', err.message || err);
     res.status(500).json({ error: 'Transcription failed.' });
+  }
+});
+
+// === /api/assembly/token ===
+app.get('/api/assembly/token', async (req, res) => {
+  try {
+    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
+      method: 'POST',
+      headers: {
+        authorization: process.env.ASSEMBLYAI_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+    const { token } = await response.json();
+    res.json({ token });
+  } catch (err) {
+    console.error('❌ Assembly token error:', err.message || err);
+    res.status(500).json({ error: 'Token generation failed.' });
   }
 });
 
