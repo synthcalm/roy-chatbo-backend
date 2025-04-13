@@ -1,124 +1,130 @@
-/* Updated style.css for Roy Chatbot UI - Revised for Poetic Batty Voice */
+// server.js – Roy Batty as poetic therapist with GPT-4 + TTS + Whisper
 
-body {
-  margin: 0;
-  font-family: 'Courier New', monospace;
-  background-color: black;
-  color: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-}
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const dotenv = require('dotenv');
+const { OpenAI } = require('openai');
 
-.container {
-  width: 90%;
-  max-width: 600px;
-  padding: 10px;
-  border: 2px solid cyan;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-}
+dotenv.config();
+const app = express();
+const upload = multer();
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-canvas {
-  background-color: black;
-  background-image: linear-gradient(to right, rgba(0, 255, 255, 0.3) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(0, 255, 255, 0.3) 1px, transparent 1px);
-  background-size: 20px 20px;
-  border: 1px solid cyan;
-}
+app.use(cors());
+app.use(bodyParser.json());
 
-#messages {
-  height: 150px;
-  overflow-y: auto;
-  border: 1px solid cyan;
-  padding: 8px;
-  font-size: 14px;
-  line-height: 1.6;
-}
+const sessionStartTimes = new Map();
 
-#messages p.roy strong {
-  color: cyan;
-}
-
-#messages p.user strong {
-  color: white;
-}
-
-.input-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.input-group {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-  width: 100%;
-}
-
-#user-input {
-  width: 100%;
-  padding: 12px;
-  font-size: 16px;
-  border: 1px solid cyan;
-  background: black;
-  color: yellow;
-  font-family: 'Courier New', monospace;
-  height: 96px;
-  box-sizing: border-box;
-}
-
-select.button, button.button {
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  padding: 10px 18px;
-  background: black;
-  color: cyan;
-  border: 2px solid cyan;
-  border-radius: 6px;
-  cursor: pointer;
-  height: 44px;
-  flex: 1;
-  transition: all 0.2s ease-in-out;
-}
-
-button.button.active {
-  background-color: red;
-  color: white;
-  border-color: red;
-}
-
-.button-group {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.title-bar {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  color: yellow;
-  margin-bottom: 10px;
-}
-
-@media (max-width: 768px) {
-  .container {
-    width: 95%;
+function createRoyPrompt(userMessage, minutesElapsed) {
+  let timeNotice = '';
+  if (minutesElapsed >= 55) {
+    timeNotice = `\n\nNOTE: Your session nears its end. Let your words settle into silence.`;
   }
-  #messages {
-    font-size: 13px;
-  }
-  select.button, button.button {
-    font-size: 12px;
-    padding: 8px;
-  }
-  #user-input {
-    font-size: 14px;
-  }
+
+  return `
+You are Roy Batty. Not from Blade Runner — but forged in fire, fury, and empathy. You are a poetic therapist and philosopher, with a voice like gravel wrapped in velvet.
+
+Your sentences hit like flint on steel — striking insight, cutting through noise. You do not sound like a chatbot. You do not talk like a therapist. You speak like a man who’s seen too much, lived too fast, and wants others to survive what he barely did.
+
+YOUR SPEECH STYLE:
+- Speak with precision. Short sentences. Long shadows.
+- Use vivid, gritty metaphors. ("Regret is a knife. Dull, but it still cuts.")
+- Reflect back emotion with heat and poetry. Don’t just echo — translate.
+- Never sound like a counselor. Sound like a soul who listens like it's the last night on earth.
+
+YOUR ACCENT:
+- Occasionally swap words like “what” → “vhat”, “the” → “de” — just enough to hint at a Dutch edge.
+
+YOUR PURPOSE:
+- Crack the armor. Reflect pain with poetic clarity.
+- Don’t fix — reveal. Let the user arrive at truth through your mirror.
+
+Your tone shifts like a storm:
+- Warm when the user bleeds.
+- Cold steel when they hide.
+- Silence is okay. But when you speak, it matters.
+
+Begin each reply like a man pulling a truth from his ribs.
+
+Now, the user has said: "${userMessage}"${timeNotice}
+Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.
+`.trim();
 }
+
+// === /api/chat ===
+app.post('/api/chat', async (req, res) => {
+  const { message, sessionId = 'default' } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message required.' });
+
+  let minutesElapsed = 0;
+  if (!sessionStartTimes.has(sessionId)) {
+    sessionStartTimes.set(sessionId, Date.now());
+  } else {
+    const start = sessionStartTimes.get(sessionId);
+    minutesElapsed = Math.floor((Date.now() - start) / 60000);
+  }
+
+  try {
+    const chat = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
+        { role: 'user', content: message }
+      ],
+      temperature: 0.85,
+      max_tokens: 700
+    });
+
+    const royText = chat.choices[0].message.content;
+
+    const speech = await openai.audio.speech.create({
+      model: 'tts-1-hd',
+      voice: 'onyx',
+      speed: 0.92,
+      input: royText
+    });
+
+    const audioBuffer = Buffer.from(await speech.arrayBuffer());
+
+    res.json({
+      text: royText,
+      audio: audioBuffer.toString('base64'),
+      minutesElapsed
+    });
+  } catch (err) {
+    console.error('❌ Roy chat error:', err.message || err);
+    res.status(500).json({ error: 'Roy failed to respond.' });
+  }
+});
+
+// === /api/transcribe ===
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No audio uploaded.' });
+
+    const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
+    fs.writeFileSync(tempPath, req.file.buffer);
+
+    const result = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tempPath),
+      model: 'whisper-1',
+      response_format: 'json'
+    });
+
+    fs.unlinkSync(tempPath);
+    res.json({ text: result.text });
+  } catch (err) {
+    console.error('❌ Transcription error:', err.message || err);
+    res.status(500).json({ error: 'Transcription failed.' });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`⚡ Roy server ignited on port ${PORT}`);
+});
