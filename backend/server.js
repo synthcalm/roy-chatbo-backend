@@ -1,4 +1,4 @@
-// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper + AssemblyAI Token
+// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -7,14 +7,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const dotenv = require('dotenv');
-const fetch = require('node-fetch');
 const { OpenAI } = require('openai');
 
 dotenv.config();
 
-// Validate required environment variables
-if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
-  console.error('Missing required environment variables. Ensure OPENAI_API_KEY and ASSEMBLYAI_API_KEY are set.');
+if (!process.env.OPENAI_API_KEY) {
+  console.error('Missing required environment variable: OPENAI_API_KEY');
   process.exit(1);
 }
 
@@ -25,7 +23,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.use(cors());
 app.use(bodyParser.json());
 
-// Session management with cleanup
 const sessionStartTimes = new Map();
 const SESSION_CLEANUP_INTERVAL = 3600 * 1000; // Clean up sessions older than 1 hour
 
@@ -52,14 +49,17 @@ User said: "${userMessage}"${timeNotice}
 Respond as Roy Batty.`.trim();
 }
 
-app.post('/api/chat/text', async (req, res) => {
+// Combined chat endpoint for text and audio
+app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
+  const mode = req.query.mode || 'audio'; // Default to audio mode
+
   if (!message || typeof message !== 'string') {
     console.error('Invalid request: message is missing or not a string', req.body);
     return res.status(400).json({ error: 'Message must be a non-empty string.' });
   }
 
-  console.log('Received /api/chat/text request:', { message, sessionId });
+  console.log('Received /api/chat request:', { message, sessionId, mode });
 
   let minutesElapsed = 0;
   if (!sessionStartTimes.has(sessionId)) {
@@ -69,6 +69,7 @@ app.post('/api/chat/text', async (req, res) => {
   minutesElapsed = Math.floor((Date.now() - start) / 60000);
 
   try {
+    const startText = Date.now();
     const chat = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
@@ -78,50 +79,37 @@ app.post('/api/chat/text', async (req, res) => {
       temperature: 0.85,
       max_tokens: 700
     });
+    console.log('Text generation time:', Date.now() - startText, 'ms');
 
     const royText = chat.choices[0].message.content;
-    console.log('Generated Roy text:', royText);
-    res.json({ text: royText });
+
+    let audioBase64 = null;
+    if (mode === 'audio') {
+      const startAudio = Date.now();
+      const speech = await openai.audio.speech.create({
+        model: 'tts-1',
+        voice: 'onyx',
+        speed: 0.92,
+        input: royText
+      });
+      console.log('Audio generation time:', Date.now() - startAudio, 'ms');
+
+      const audioBuffer = Buffer.from(await speech.arrayBuffer());
+      audioBase64 = audioBuffer.toString('base64');
+    }
+
+    res.json({ text: royText, audio: audioBase64 });
   } catch (err) {
     console.error('❌ Roy chat error:', err.message || err);
     if (err.message.includes('429')) {
-      res.status(429).json({ error: 'Rate limit exceeded for text generation.' });
+      res.status(429).json({ error: 'Rate limit exceeded for text/audio generation.' });
     } else {
       res.status(500).json({ error: 'Roy failed to respond.' });
     }
   }
 });
 
-app.post('/api/chat/audio', async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text || typeof text !== 'string') {
-      console.error('Invalid request: text is missing or not a string', req.body);
-      return res.status(400).json({ error: 'Text must be a non-empty string.' });
-    }
-
-    console.log('Received /api/chat/audio request:', { text });
-
-    const speech = await openai.audio.speech.create({
-      model: 'tts-1',
-      voice: 'onyx',
-      speed: 0.92,
-      input: text
-    });
-
-    const audioBuffer = Buffer.from(await speech.arrayBuffer());
-    console.log('Generated audio, size:', audioBuffer.length);
-    res.json({ audio: audioBuffer.toString('base64') });
-  } catch (err) {
-    console.error('❌ Audio generation error:', err.message || err);
-    if (err.message.includes('429')) {
-      res.status(429).json({ error: 'Rate limit exceeded for audio generation.' });
-    } else {
-      res.status(500).json({ error: 'Audio generation failed.' });
-    }
-  }
-});
-
+// Transcription endpoint using Whisper
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -133,11 +121,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     fs.writeFileSync(tempPath, req.file.buffer);
     console.log('Audio file saved for transcription:', tempPath, req.file.size);
 
+    const startTranscription = Date.now();
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: 'whisper-1',
       response_format: 'json'
     });
+    console.log('Transcription time:', Date.now() - startTranscription, 'ms');
 
     fs.unlinkSync(tempPath);
     console.log('Transcription result:', result.text);
@@ -150,43 +140,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       res.status(429).json({ error: 'Rate limit exceeded for transcription.' });
     } else {
       res.status(500).json({ error: 'Transcription failed.' });
-    }
-  }
-});
-
-app.get('/api/assembly/token', async (req, res) => {
-  try {
-    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
-      headers: {
-        authorization: process.env.ASSEMBLYAI_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ expires_in: 3600 })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AssemblyAI token fetch failed:', response.status, errorText);
-      throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
-    }
-
-    const json = await response.json();
-    if (!json.token) {
-      console.error('❌ AssemblyAI token response:', JSON.stringify(json));
-      throw new Error('Token missing in response');
-    }
-
-    console.log('AssemblyAI token generated:', json.token);
-    res.json({ token: json.token });
-  } catch (err) {
-    console.error('❌ Assembly token error:', err.message || err);
-    if (err.message.includes('401')) {
-      res.status(401).json({ error: 'Invalid AssemblyAI API key.' });
-    } else if (err.message.includes('429')) {
-      res.status(429).json({ error: 'Rate limit exceeded for AssemblyAI.' });
-    } else {
-      res.status(500).json({ error: 'Token generation failed.' });
     }
   }
 });
