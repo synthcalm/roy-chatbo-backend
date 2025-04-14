@@ -1,4 +1,4 @@
-// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper
+// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper + AssemblyAI
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -8,11 +8,12 @@ const path = require('path');
 const os = require('os');
 const dotenv = require('dotenv');
 const { OpenAI } = require('openai');
+const axios = require('axios');
 
 dotenv.config();
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error('Missing required environment variable: OPENAI_API_KEY');
+if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
+  console.error('Missing required environment variables: OPENAI_API_KEY or ASSEMBLYAI_API_KEY');
   process.exit(1);
 }
 
@@ -48,6 +49,21 @@ You are Roy Batty, a poetic therapist and philosopher with a voice like gravel w
 User said: "${userMessage}"${timeNotice}
 Respond as Roy Batty.`.trim();
 }
+
+// AssemblyAI token endpoint for real-time transcription
+app.get('/api/assembly/token', async (req, res) => {
+  try {
+    const response = await axios.post(
+      'https://api.assemblyai.com/v2/realtime/token',
+      { expires_in: 3600 },
+      { headers: { Authorization: `Bearer ${process.env.ASSEMBLYAI_API_KEY}` } }
+    );
+    res.json({ token: response.data.token });
+  } catch (err) {
+    console.error('AssemblyAI token error:', err.message || err);
+    res.status(500).json({ error: 'Failed to get AssemblyAI token.' });
+  }
+});
 
 // Combined chat endpoint for text and audio
 app.post('/api/chat', async (req, res) => {
@@ -109,7 +125,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Transcription endpoint using Whisper
+// Transcription endpoint using Whisper (kept for fallback or other features)
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
