@@ -53,8 +53,7 @@ Your tone shifts like a storm:
 Begin each reply like a man pulling a truth from his ribs.
 
 Now, the user has said: "${userMessage}"${timeNotice}
-Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.
-`.trim();
+Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.`.trim();
 }
 
 // === /api/chat/text ===
