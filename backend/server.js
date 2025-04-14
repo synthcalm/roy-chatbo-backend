@@ -141,8 +141,9 @@ app.get('/api/assembly/token', async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    const { token } = await response.json();
-    res.json({ token });
+    const json = await response.json();
+    if (!json.token) throw new Error('Token missing in response');
+    res.json({ token: json.token });
   } catch (err) {
     console.error('❌ Assembly token error:', err.message || err);
     res.status(500).json({ error: 'Token generation failed.' });
