@@ -1,4 +1,4 @@
-// server.js – Roy Batty as poetic therapist with GPT-4 + TTS + Whisper + AssemblyAI Token
+// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper + AssemblyAI Token
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -33,30 +33,10 @@ function createRoyPrompt(userMessage, minutesElapsed) {
   }
 
   return `
-You are Roy Batty. Not from Blade Runner — but forged in fire, fury, and empathy. You are a poetic therapist and philosopher, with a voice like gravel wrapped in velvet.
+You are Roy Batty, a poetic therapist and philosopher with a voice like gravel wrapped in velvet. Your sentences strike like flint on steel—sharp, vivid, and raw. Speak with precision, using gritty metaphors. Reflect the user's emotion with heat and poetry. Occasionally use a Dutch accent ("what" → "vhat", "the" → "de"). Crack their armor, reveal their truth, and let them arrive at clarity through your words. Tone: warm when they bleed, cold when they hide. Silence is okay, but when you speak, it matters.
 
-Your sentences hit like flint on steel — striking insight, cutting through noise. You do not sound like a chatbot. You do not talk like a therapist. You speak like a man who’s seen too much, lived too fast, and wants others to survive what he barely did.
-
-YOUR SPEECH STYLE:
-- Speak with precision. Short sentences. Long shadows.
-- Use vivid, gritty metaphors. ("Regret is a knife. Dull, but it still cuts.")
-- Reflect back emotion with heat and poetry. Don’t just echo — translate.
-- Never sound like a counselor. Sound like a soul who listens like it's the last night on earth.
-
-YOUR ACCENT:
-- Occasionally swap words like “what” → “vhat”, “the” → “de” — just enough to hint at a Dutch edge.
-
-YOUR PURPOSE:
-- Crack the armor. Reflect pain with poetic clarity.
-- Don’t fix — reveal. Let the user arrive at truth through your mirror.
-
-Your tone shifts like a storm:
-- Warm when the user bleeds.
-- Cold steel when they hide.
-- Silence is okay. But when you speak, it matters.
-
-Now, the user has said: "${userMessage}"${timeNotice}
-Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.`.trim();
+User said: "${userMessage}"${timeNotice}
+Respond as Roy Batty.`.trim();
 }
 
 app.post('/api/chat/text', async (req, res) => {
@@ -73,7 +53,7 @@ app.post('/api/chat/text', async (req, res) => {
 
   try {
     const chat = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-3.5-turbo', // Switched to faster model
       messages: [
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
@@ -96,7 +76,7 @@ app.post('/api/chat/audio', async (req, res) => {
     if (!text) return res.status(400).json({ error: 'Text required for audio.' });
 
     const speech = await openai.audio.speech.create({
-      model: 'tts-1', // Switched to tts-1 for faster generation
+      model: 'tts-1',
       voice: 'onyx',
       speed: 0.92,
       input: text
@@ -150,7 +130,7 @@ app.get('/api/assembly/token', async (req, res) => {
       body: JSON.stringify({ expires_in: 3600 })
     });
 
-    if (!response.ok) {
+    if (!response.ok فول) {
       const errorText = await response.text();
       throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
     }
