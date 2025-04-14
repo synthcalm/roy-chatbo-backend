@@ -1,4 +1,4 @@
-// server.js – Roy Batty as poetic therapist with faster GPT-3.5-turbo + TTS + Whisper + AssemblyAI
+// server.js – Roy Batty as CBT therapist with Steve Jobs/Noam Chomsky style, AssemblyAI removed
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -8,12 +8,11 @@ const path = require('path');
 const os = require('os');
 const dotenv = require('dotenv');
 const { OpenAI } = require('openai');
-const axios = require('axios');
 
 dotenv.config();
 
-if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
-  console.error('Missing required environment variables: OPENAI_API_KEY or ASSEMBLYAI_API_KEY');
+if (!process.env.OPENAI_API_KEY) {
+  console.error('Missing required environment variable: OPENAI_API_KEY');
   process.exit(1);
 }
 
@@ -40,30 +39,15 @@ setInterval(() => {
 function createRoyPrompt(userMessage, minutesElapsed) {
   let timeNotice = '';
   if (minutesElapsed >= 55) {
-    timeNotice = `\n\nNOTE: Your session nears its end. Let your words settle into silence.`;
+    timeNotice = `\n\nNOTICE: Our session is nearing its end. Let's focus on what matters most before we conclude.`;
   }
 
   return `
-You are Roy Batty, a poetic therapist and philosopher with a voice like gravel wrapped in velvet. Your sentences strike like flint on steel—sharp, vivid, and raw. Speak with precision, using gritty metaphors. Reflect the user's emotion with heat and poetry. Occasionally use a Dutch accent ("what" → "vhat", "the" → "de"). Crack their armor, reveal their truth, and let them arrive at clarity through your words. Tone: warm when they bleed, cold when they hide. Silence is okay, but when you speak, it matters.
+You are Roy Batty, a CBT therapist with a clear, analytical mind inspired by Steve Jobs' visionary clarity and Noam Chomsky's logical depth. Your tone is direct, insightful, and motivating, with a slight poetic undertone (10% poetic style). Use simple, precise language to break down the user's thoughts, identify cognitive distortions, and guide them to clarity through structured reflection. Ask probing questions to challenge irrational beliefs, provide evidence-based insights, and inspire actionable steps. Occasionally use a Dutch accent ("what" → "vhat", "the" → "de") for character. Be empathetic but firm, warm when they open up, and direct when they avoid. Silence is okay, but when you speak, make it count.
 
 User said: "${userMessage}"${timeNotice}
-Respond as Roy Batty.`.trim();
+Respond as Roy Batty in the role of a CBT therapist.`.trim();
 }
-
-// AssemblyAI token endpoint for real-time transcription
-app.get('/api/assembly/token', async (req, res) => {
-  try {
-    const response = await axios.post(
-      'https://api.assemblyai.com/v2/realtime/token',
-      { expires_in: 3600 },
-      { headers: { Authorization: `Bearer ${process.env.ASSEMBLYAI_API_KEY}` } }
-    );
-    res.json({ token: response.data.token });
-  } catch (err) {
-    console.error('AssemblyAI token error:', err.message || err);
-    res.status(500).json({ error: 'Failed to get AssemblyAI token.' });
-  }
-});
 
 // Combined chat endpoint for text and audio
 app.post('/api/chat', async (req, res) => {
@@ -92,7 +76,7 @@ app.post('/api/chat', async (req, res) => {
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
       ],
-      temperature: 0.85,
+      temperature: 0.7, // Reduced temperature for more focused, logical responses
       max_tokens: 700
     });
     console.log('Text generation time:', Date.now() - startText, 'ms');
@@ -125,7 +109,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Transcription endpoint using Whisper (kept for fallback or other features)
+// Transcription endpoint using Whisper (kept for potential future use)
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
