@@ -12,6 +12,7 @@ const { OpenAI } = require('openai');
 
 dotenv.config();
 
+// Validate required environment variables
 if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
   console.error('Missing required environment variables. Ensure OPENAI_API_KEY and ASSEMBLYAI_API_KEY are set.');
   process.exit(1);
@@ -24,7 +25,19 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.use(cors());
 app.use(bodyParser.json());
 
+// Session management with cleanup
 const sessionStartTimes = new Map();
+const SESSION_CLEANUP_INTERVAL = 3600 * 1000; // Clean up sessions older than 1 hour
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, startTime] of sessionStartTimes.entries()) {
+    if (now - startTime > SESSION_CLEANUP_INTERVAL) {
+      sessionStartTimes.delete(sessionId);
+      console.log(`Cleaned up session: ${sessionId}`);
+    }
+  }
+}, SESSION_CLEANUP_INTERVAL);
 
 function createRoyPrompt(userMessage, minutesElapsed) {
   let timeNotice = '';
@@ -41,19 +54,23 @@ Respond as Roy Batty.`.trim();
 
 app.post('/api/chat/text', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
-  if (!message) return res.status(400).json({ error: 'Message required.' });
+  if (!message || typeof message !== 'string') {
+    console.error('Invalid request: message is missing or not a string', req.body);
+    return res.status(400).json({ error: 'Message must be a non-empty string.' });
+  }
+
+  console.log('Received /api/chat/text request:', { message, sessionId });
 
   let minutesElapsed = 0;
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
-  } else {
-    const start = sessionStartTimes.get(sessionId);
-    minutesElapsed = Math.floor((Date.now() - start) / 60000);
   }
+  const start = sessionStartTimes.get(sessionId);
+  minutesElapsed = Math.floor((Date.now() - start) / 60000);
 
   try {
     const chat = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo', // Switched to faster model
+      model: 'gpt-3.5-turbo',
       messages: [
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
@@ -63,17 +80,27 @@ app.post('/api/chat/text', async (req, res) => {
     });
 
     const royText = chat.choices[0].message.content;
+    console.log('Generated Roy text:', royText);
     res.json({ text: royText });
   } catch (err) {
     console.error('❌ Roy chat error:', err.message || err);
-    res.status(500).json({ error: 'Roy failed to respond.' });
+    if (err.message.includes('429')) {
+      res.status(429).json({ error: 'Rate limit exceeded for text generation.' });
+    } else {
+      res.status(500).json({ error: 'Roy failed to respond.' });
+    }
   }
 });
 
 app.post('/api/chat/audio', async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) return res.status(400).json({ error: 'Text required for audio.' });
+    if (!text || typeof text !== 'string') {
+      console.error('Invalid request: text is missing or not a string', req.body);
+      return res.status(400).json({ error: 'Text must be a non-empty string.' });
+    }
+
+    console.log('Received /api/chat/audio request:', { text });
 
     const speech = await openai.audio.speech.create({
       model: 'tts-1',
@@ -83,16 +110,24 @@ app.post('/api/chat/audio', async (req, res) => {
     });
 
     const audioBuffer = Buffer.from(await speech.arrayBuffer());
+    console.log('Generated audio, size:', audioBuffer.length);
     res.json({ audio: audioBuffer.toString('base64') });
   } catch (err) {
     console.error('❌ Audio generation error:', err.message || err);
-    res.status(500).json({ error: 'Audio generation failed.' });
+    if (err.message.includes('429')) {
+      res.status(429).json({ error: 'Rate limit exceeded for audio generation.' });
+    } else {
+      res.status(500).json({ error: 'Audio generation failed.' });
+    }
   }
 });
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No audio uploaded.' });
+    if (!req.file) {
+      console.error('No audio file provided in request');
+      return res.status(400).json({ error: 'No audio uploaded.' });
+    }
 
     const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
     fs.writeFileSync(tempPath, req.file.buffer);
@@ -130,8 +165,9 @@ app.get('/api/assembly/token', async (req, res) => {
       body: JSON.stringify({ expires_in: 3600 })
     });
 
-    if (!response.ok فول) {
+    if (!response.ok) {
       const errorText = await response.text();
+      console.error('AssemblyAI token fetch failed:', response.status, errorText);
       throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
     }
 
