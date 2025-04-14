@@ -122,6 +122,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
     fs.writeFileSync(tempPath, req.file.buffer);
+    console.log('Audio file saved for transcription:', tempPath, req.file.size);
 
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
@@ -130,6 +131,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     });
 
     fs.unlinkSync(tempPath);
+    console.log('Transcription result:', result.text);
     res.json({ text: result.text });
   } catch (err) {
     console.error('❌ Transcription error:', err.message || err);
@@ -166,6 +168,7 @@ app.get('/api/assembly/token', async (req, res) => {
       throw new Error('Token missing in response');
     }
 
+    console.log('AssemblyAI token generated:', json.token);
     res.json({ token: json.token });
   } catch (err) {
     console.error('❌ Assembly token error:', err.message || err);
