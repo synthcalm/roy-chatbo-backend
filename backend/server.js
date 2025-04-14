@@ -10,16 +10,13 @@ const dotenv = require('dotenv');
 const fetch = require('node-fetch');
 const { OpenAI } = require('openai');
 
-// Load environment variables
 dotenv.config();
 
-// Validate environment variables
 if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
   console.error('Missing required environment variables. Ensure OPENAI_API_KEY and ASSEMBLYAI_API_KEY are set.');
   process.exit(1);
 }
 
-// Initialize Express app
 const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -62,7 +59,6 @@ Now, the user has said: "${userMessage}"${timeNotice}
 Respond as Roy Batty. Poetic. Fierce. Awake. Never dull.`.trim();
 }
 
-// === /api/chat/text ===
 app.post('/api/chat/text', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required.' });
@@ -94,14 +90,13 @@ app.post('/api/chat/text', async (req, res) => {
   }
 });
 
-// === /api/chat/audio ===
 app.post('/api/chat/audio', async (req, res) => {
   try {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: 'Text required for audio.' });
 
     const speech = await openai.audio.speech.create({
-      model: 'tts-1-hd',
+      model: 'tts-1', // Switched to tts-1 for faster generation
       voice: 'onyx',
       speed: 0.92,
       input: text
@@ -115,7 +110,6 @@ app.post('/api/chat/audio', async (req, res) => {
   }
 });
 
-// === /api/transcribe ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio uploaded.' });
@@ -145,7 +139,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// === /api/assembly/token ===
 app.get('/api/assembly/token', async (req, res) => {
   try {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
