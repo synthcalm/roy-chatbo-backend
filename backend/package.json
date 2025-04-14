@@ -1,7 +1,7 @@
 {
-  "name": "stability-image-backend",
+  "name": "roy-chatbot-backend",
   "version": "1.0.0",
-  "description": "Backend for Mood Into Art using Stability and AssemblyAI",
+  "description": "Backend for Roy, a poetic therapist chatbot using OpenAI and AssemblyAI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
     "openai": "^4.0.0"
-  }
+  },
+  "license": "MIT"
 }
