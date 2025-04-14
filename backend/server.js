@@ -1,5 +1,4 @@
 // server.js – Roy Batty as poetic therapist with GPT-4 + TTS + Whisper + AssemblyAI Token
-
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -11,7 +10,16 @@ const dotenv = require('dotenv');
 const fetch = require('node-fetch');
 const { OpenAI } = require('openai');
 
+// Load environment variables
 dotenv.config();
+
+// Validate environment variables
+if (!process.env.OPENAI_API_KEY || !process.env.ASSEMBLYAI_API_KEY) {
+  console.error('Missing required environment variables. Ensure OPENAI_API_KEY and ASSEMBLYAI_API_KEY are set.');
+  process.exit(1);
+}
+
+// Initialize Express app
 const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -125,11 +133,17 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     res.json({ text: result.text });
   } catch (err) {
     console.error('❌ Transcription error:', err.message || err);
-    res.status(500).json({ error: 'Transcription failed.' });
+    if (err.message.includes('413')) {
+      res.status(413).json({ error: 'Audio file too large.' });
+    } else if (err.message.includes('429')) {
+      res.status(429).json({ error: 'Rate limit exceeded for transcription.' });
+    } else {
+      res.status(500).json({ error: 'Transcription failed.' });
+    }
   }
 });
 
-// ✅ FIXED: AssemblyAI token generation
+// === /api/assembly/token ===
 app.get('/api/assembly/token', async (req, res) => {
   try {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
@@ -138,11 +152,15 @@ app.get('/api/assembly/token', async (req, res) => {
         authorization: process.env.ASSEMBLYAI_API_KEY,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ expires_in: 3600 }) // ← Add this line to fix the issue
+      body: JSON.stringify({ expires_in: 3600 })
     });
 
-    const json = await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
+    }
 
+    const json = await response.json();
     if (!json.token) {
       console.error('❌ AssemblyAI token response:', JSON.stringify(json));
       throw new Error('Token missing in response');
@@ -151,7 +169,13 @@ app.get('/api/assembly/token', async (req, res) => {
     res.json({ token: json.token });
   } catch (err) {
     console.error('❌ Assembly token error:', err.message || err);
-    res.status(500).json({ error: 'Token generation failed.' });
+    if (err.message.includes('401')) {
+      res.status(401).json({ error: 'Invalid AssemblyAI API key.' });
+    } else if (err.message.includes('429')) {
+      res.status(429).json({ error: 'Rate limit exceeded for AssemblyAI.' });
+    } else {
+      res.status(500).json({ error: 'Token generation failed.' });
+    }
   }
 });
 
