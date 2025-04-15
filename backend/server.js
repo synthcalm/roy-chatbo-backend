@@ -14,7 +14,12 @@ const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const ASSEMBLYAI_TOKEN = '47a258046cae4b8bbe6db9606816fd77'; // ⛔ hardcoded for testing only
+// Use environment variable for AssemblyAI API key
+const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+
+if (!ASSEMBLYAI_API_KEY) {
+  console.error('❌ ASSEMBLYAI_API_KEY environment variable is not set. The /api/assembly/token endpoint will fail.');
+}
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -36,24 +41,31 @@ setInterval(() => {
 // ==================== ASSEMBLYAI TOKEN ENDPOINT ====================
 app.get('/api/assembly/token', async (req, res) => {
   try {
+    // Check if the API key is available
+    if (!ASSEMBLYAI_API_KEY) {
+      throw new Error('ASSEMBLYAI_API_KEY is not configured on the server.');
+    }
+
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
       method: 'POST',
       headers: {
-        authorization: ASSEMBLYAI_TOKEN,
-        'Content-Type': 'application/json' // ✅ REQUIRED
-      }
+        'Authorization': `Bearer ${ASSEMBLYAI_API_KEY}`, // Correct format for AssemblyAI
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expires_in: 3600 }) // Token valid for 1 hour
     });
 
     if (!response.ok) {
-      throw new Error(`AssemblyAI token fetch failed: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     res.json({ token: data.token });
 
   } catch (err) {
-    console.error('AssemblyAI token generation error:', err);
-    res.status(500).json({ error: 'Token generation failed' });
+    console.error('AssemblyAI token generation error:', err.message);
+    res.status(500).json({ error: 'Token generation failed', details: err.message });
   }
 });
 
@@ -151,10 +163,10 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 });
 
 // ==================== START SERVER ====================
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000; // Match the port from deployment logs
 app.listen(PORT, () => {
   console.log(`⚡ Roy server running on port ${PORT}`);
   console.log(`- /api/chat endpoint ready`);
   console.log(`- /api/transcribe endpoint ready`);
-  console.log(`- /api/assembly/token live (static token injected + fixed)`);
+  console.log(`- /api/assembly/token live`);
 });
