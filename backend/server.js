@@ -1,4 +1,4 @@
-// server.js – Roy Batty as CBT therapist with Steve Jobs/Noam Chomsky style, AssemblyAI removed
+// server.js – Roy Batty as CBT therapist with Steve Jobs/Noam Chomsky style
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -11,22 +11,30 @@ const { OpenAI } = require('openai');
 
 dotenv.config();
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error('Missing required environment variable: OPENAI_API_KEY');
-  process.exit(1);
+// Validate required environment variables
+const REQUIRED_ENV = ['OPENAI_API_KEY'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
 }
 
 const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
+// Session management
 const sessionStartTimes = new Map();
-const SESSION_CLEANUP_INTERVAL = 3600 * 1000; // Clean up sessions older than 1 hour
+const SESSION_CLEANUP_INTERVAL = 3600 * 1000; // 1 hour
 
-setInterval(() => {
+setInterval(cleanupOldSessions, SESSION_CLEANUP_INTERVAL);
+
+function cleanupOldSessions() {
   const now = Date.now();
   for (const [sessionId, startTime] of sessionStartTimes.entries()) {
     if (now - startTime > SESSION_CLEANUP_INTERVAL) {
@@ -34,7 +42,22 @@ setInterval(() => {
       console.log(`Cleaned up session: ${sessionId}`);
     }
   }
-}, SESSION_CLEANUP_INTERVAL);
+}
+
+// ==================== NEW TOKEN ENDPOINT ====================
+app.get('/api/assembly/token', (req, res) => {
+  const token = process.env.ASSEMBLYAI_TOKEN;
+  
+  if (!token) {
+    console.error('AssemblyAI token not configured in environment variables');
+    return res.status(501).json({ 
+      error: "Voice features temporarily unavailable" 
+    });
+  }
+  
+  res.json({ token });
+});
+// ============================================================
 
 function createRoyPrompt(userMessage, minutesElapsed) {
   let timeNotice = '';
@@ -49,102 +72,98 @@ User said: "${userMessage}"${timeNotice}
 Respond as Roy Batty in the role of a CBT therapist.`.trim();
 }
 
-// Combined chat endpoint for text and audio
+// Combined chat endpoint
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
-  const mode = req.query.mode || 'audio'; // Default to audio mode
+  const mode = req.query.mode || 'audio';
 
   if (!message || typeof message !== 'string') {
-    console.error('Invalid request: message is missing or not a string', req.body);
     return res.status(400).json({ error: 'Message must be a non-empty string.' });
   }
 
-  console.log('Received /api/chat request:', { message, sessionId, mode });
-
-  let minutesElapsed = 0;
+  // Session timing
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
   }
-  const start = sessionStartTimes.get(sessionId);
-  minutesElapsed = Math.floor((Date.now() - start) / 60000);
+  const minutesElapsed = Math.floor((Date.now() - sessionStartTimes.get(sessionId)) / 60000);
 
   try {
-    const startText = Date.now();
+    // Text generation
     const chat = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
       ],
-      temperature: 0.7, // Reduced temperature for more focused, logical responses
+      temperature: 0.7,
       max_tokens: 700
     });
-    console.log('Text generation time:', Date.now() - startText, 'ms');
 
     const royText = chat.choices[0].message.content;
 
+    // Audio generation (if requested)
     let audioBase64 = null;
-    if (mode === 'audio') {
-      const startAudio = Date.now();
+    if (mode === 'audio' || mode === 'both') {
       const speech = await openai.audio.speech.create({
         model: 'tts-1',
         voice: 'onyx',
         speed: 0.92,
         input: royText
       });
-      console.log('Audio generation time:', Date.now() - startAudio, 'ms');
-
-      const audioBuffer = Buffer.from(await speech.arrayBuffer());
-      audioBase64 = audioBuffer.toString('base64');
+      audioBase64 = Buffer.from(await speech.arrayBuffer()).toString('base64');
     }
 
-    res.json({ text: royText, audio: audioBase64 });
+    res.json({ 
+      text: royText, 
+      audio: audioBase64 
+    });
+
   } catch (err) {
-    console.error('❌ Roy chat error:', err.message || err);
-    if (err.message.includes('429')) {
-      res.status(429).json({ error: 'Rate limit exceeded for text/audio generation.' });
-    } else {
-      res.status(500).json({ error: 'Roy failed to respond.' });
-    }
+    console.error('Chat error:', err);
+    const status = err.message.includes('429') ? 429 : 500;
+    res.status(status).json({ 
+      error: status === 429 
+        ? 'Rate limit exceeded' 
+        : 'Roy failed to respond' 
+    });
   }
 });
 
-// Transcription endpoint using Whisper (kept for potential future use)
+// Transcription endpoint
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-  try {
-    if (!req.file) {
-      console.error('No audio file provided in request');
-      return res.status(400).json({ error: 'No audio uploaded.' });
-    }
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio uploaded.' });
+  }
 
+  try {
     const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
     fs.writeFileSync(tempPath, req.file.buffer);
-    console.log('Audio file saved for transcription:', tempPath, req.file.size);
 
-    const startTranscription = Date.now();
     const result = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: 'whisper-1',
       response_format: 'json'
     });
-    console.log('Transcription time:', Date.now() - startTranscription, 'ms');
 
     fs.unlinkSync(tempPath);
-    console.log('Transcription result:', result.text);
     res.json({ text: result.text });
+
   } catch (err) {
-    console.error('❌ Transcription error:', err.message || err);
-    if (err.message.includes('413')) {
-      res.status(413).json({ error: 'Audio file too large.' });
-    } else if (err.message.includes('429')) {
-      res.status(429).json({ error: 'Rate limit exceeded for transcription.' });
-    } else {
-      res.status(500).json({ error: 'Transcription failed.' });
-    }
+    console.error('Transcription error:', err);
+    const status = err.message.includes('429') ? 429 : 
+                   err.message.includes('413') ? 413 : 500;
+    res.status(status).json({ 
+      error: status === 429 ? 'Rate limited' :
+             status === 413 ? 'File too large' : 
+             'Transcription failed' 
+    });
   }
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`⚡ Roy server ignited on port ${PORT}`);
+  console.log(`⚡ Roy server running on port ${PORT}`);
+  console.log(`- /api/chat endpoint ready`);
+  console.log(`- /api/transcribe endpoint ready`);
+  console.log(`- /api/assembly/token endpoint ${process.env.ASSEMBLYAI_TOKEN ? 'ready' : 'MISSING TOKEN'}`);
 });
