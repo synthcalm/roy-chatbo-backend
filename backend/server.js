@@ -7,30 +7,21 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const dotenv = require('dotenv');
-const fetch = require('node-fetch'); // Needed for external API calls
+const fetch = require('node-fetch'); // required for external requests
 const { OpenAI } = require('openai');
-
-dotenv.config();
-
-const REQUIRED_ENV = ['OPENAI_API_KEY', 'ASSEMBLYAI_TOKEN'];
-for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) {
-    console.error(`Missing required environment variable: ${key}`);
-    process.exit(1);
-  }
-}
 
 const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const ASSEMBLYAI_TOKEN = '47a258046cae4b8bbe6db9606816fd77'; // ⛔ hardcoded for dev/testing only
 
 app.use(cors());
 app.use(bodyParser.json());
 
 // ==================== SESSION MANAGEMENT ====================
 const sessionStartTimes = new Map();
-const SESSION_CLEANUP_INTERVAL = 3600 * 1000; // 1 hour
+const SESSION_CLEANUP_INTERVAL = 3600 * 1000;
 
 setInterval(() => {
   const now = Date.now();
@@ -42,24 +33,24 @@ setInterval(() => {
   }
 }, SESSION_CLEANUP_INTERVAL);
 
-// ==================== REALTIME TOKEN FOR ASSEMBLYAI ====================
+// ==================== FIXED TOKEN ENDPOINT ====================
 app.get('/api/assembly/token', async (req, res) => {
   try {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
       method: 'POST',
       headers: {
-        authorization: process.env.ASSEMBLYAI_TOKEN
+        authorization: ASSEMBLYAI_TOKEN
       }
     });
 
     if (!response.ok) {
-      throw new Error(`Token fetch failed: ${response.status}`);
+      throw new Error(`AssemblyAI token fetch failed: ${response.status}`);
     }
 
     const data = await response.json();
     res.json({ token: data.token });
   } catch (err) {
-    console.error('Token generation error:', err);
+    console.error('AssemblyAI token generation error:', err);
     res.status(500).json({ error: 'Token generation failed' });
   }
 });
@@ -88,6 +79,7 @@ app.post('/api/chat', async (req, res) => {
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
   }
+
   const minutesElapsed = Math.floor((Date.now() - sessionStartTimes.get(sessionId)) / 60000);
 
   try {
@@ -125,7 +117,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ==================== AUDIO FILE TRANSCRIPTION ====================
+// ==================== TRANSCRIPTION UPLOAD ====================
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No audio uploaded.' });
@@ -162,5 +154,5 @@ app.listen(PORT, () => {
   console.log(`⚡ Roy server running on port ${PORT}`);
   console.log(`- /api/chat endpoint ready`);
   console.log(`- /api/transcribe endpoint ready`);
-  console.log(`- /api/assembly/token endpoint ${process.env.ASSEMBLYAI_TOKEN ? 'ready' : 'MISSING TOKEN'}`);
+  console.log(`- /api/assembly/token live (static token injected)`);
 });
