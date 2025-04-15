@@ -1,4 +1,4 @@
-// server.js – Roy Batty as CBT therapist with Steve Jobs/Noam Chomsky style
+// server.js – Roy Batty using OpenAI Whisper (Assembly temporarily disabled)
 
 const express = require('express');
 const cors = require('cors');
@@ -7,24 +7,15 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const fetch = require('node-fetch');
 const { OpenAI } = require('openai');
 
 const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Use environment variable for AssemblyAI API key
-const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
-
-if (!ASSEMBLYAI_API_KEY) {
-  console.error('❌ ASSEMBLYAI_API_KEY environment variable is not set. The /api/assembly/token endpoint will fail.');
-}
-
 app.use(cors());
 app.use(bodyParser.json());
 
-// ==================== SESSION MANAGEMENT ====================
 const sessionStartTimes = new Map();
 const SESSION_CLEANUP_INTERVAL = 3600 * 1000;
 
@@ -38,35 +29,9 @@ setInterval(() => {
   }
 }, SESSION_CLEANUP_INTERVAL);
 
-// ==================== ASSEMBLYAI TOKEN ENDPOINT ====================
+// ==================== ASSEMBLYAI TOKEN ENDPOINT (disabled) ====================
 app.get('/api/assembly/token', async (req, res) => {
-  try {
-    // Check if the API key is available
-    if (!ASSEMBLYAI_API_KEY) {
-      throw new Error('ASSEMBLYAI_API_KEY is not configured on the server.');
-    }
-
-    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ASSEMBLYAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ expires_in: 3600 })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`AssemblyAI token fetch failed: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    res.json({ token: data.token });
-
-  } catch (err) {
-    console.error('AssemblyAI token generation error:', err.message);
-    res.status(500).json({ error: 'Token generation failed', details: err.message });
-  }
+  res.status(503).json({ error: 'AssemblyAI temporarily disabled. Using OpenAI Whisper fallback.' });
 });
 
 // ==================== CHAT ENDPOINT ====================
@@ -131,7 +96,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ==================== TRANSCRIBE AUDIO UPLOAD ====================
+// ==================== TRANSCRIBE AUDIO UPLOAD (Whisper) ====================
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No audio uploaded.' });
@@ -168,5 +133,5 @@ app.listen(PORT, () => {
   console.log(`⚡ Roy server running on port ${PORT}`);
   console.log(`- /api/chat endpoint ready`);
   console.log(`- /api/transcribe endpoint ready`);
-  console.log(`- /api/assembly/token live`);
+  console.log(`- /api/assembly/token DISABLED — using OpenAI Whisper fallback`);
 });
