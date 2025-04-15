@@ -1,4 +1,4 @@
-// server.js – Roy backend using Whisper transcription only
+// server.js – Roy backend using Whisper transcription only, now returns text length for frontend timing sync
 
 const express = require('express');
 const cors = require('cors');
@@ -67,7 +67,12 @@ app.post('/api/chat', async (req, res) => {
       audioBase64 = buffer.toString('base64');
     }
 
-    res.json({ text: royText, audio: audioBase64, minutesElapsed });
+    res.json({
+      text: royText,
+      audio: audioBase64,
+      minutesElapsed,
+      length: royText.length
+    });
   } catch (err) {
     console.error('Roy error:', err.message || err);
     res.status(500).json({ error: 'Roy failed to respond.' });
