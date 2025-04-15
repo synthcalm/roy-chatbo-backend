@@ -14,7 +14,7 @@ const app = express();
 const upload = multer();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const ASSEMBLYAI_TOKEN = '47a258046cae4b8bbe6db9606816fd77'; // ⛔ hardcoded for dev/testing only
+const ASSEMBLYAI_TOKEN = '47a258046cae4b8bbe6db9606816fd77'; // ⛔ hardcoded for testing only
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -33,14 +33,14 @@ setInterval(() => {
   }
 }, SESSION_CLEANUP_INTERVAL);
 
-// ==================== FIXED TOKEN ENDPOINT ====================
+// ==================== ASSEMBLYAI TOKEN ENDPOINT ====================
 app.get('/api/assembly/token', async (req, res) => {
   try {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
       method: 'POST',
       headers: {
         authorization: ASSEMBLYAI_TOKEN,
-        'Content-Type': 'application/json' // ✅ REQUIRED FIX
+        'Content-Type': 'application/json' // ✅ REQUIRED
       }
     });
 
@@ -57,7 +57,7 @@ app.get('/api/assembly/token', async (req, res) => {
   }
 });
 
-// ==================== CHAT ROUTE ====================
+// ==================== CHAT ENDPOINT ====================
 function createRoyPrompt(userMessage, minutesElapsed) {
   const timeNotice = minutesElapsed >= 55
     ? `\n\nNOTICE: Our session is nearing its end. Let's focus on what matters most before we conclude.`
@@ -115,3 +115,46 @@ app.post('/api/chat', async (req, res) => {
     const status = err.message.includes('429') ? 429 : 500;
     res.status(status).json({
       error: status === 429 ? 'Rate limit exceeded' : 'Roy failed to respond'
+    });
+  }
+});
+
+// ==================== TRANSCRIBE AUDIO UPLOAD ====================
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio uploaded.' });
+  }
+
+  try {
+    const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
+    fs.writeFileSync(tempPath, req.file.buffer);
+
+    const result = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tempPath),
+      model: 'whisper-1',
+      response_format: 'json'
+    });
+
+    fs.unlinkSync(tempPath);
+    res.json({ text: result.text });
+
+  } catch (err) {
+    console.error('Transcription error:', err);
+    const status = err.message.includes('429') ? 429 :
+                   err.message.includes('413') ? 413 : 500;
+    res.status(status).json({
+      error: status === 429 ? 'Rate limited' :
+             status === 413 ? 'File too large' :
+             'Transcription failed'
+    });
+  }
+});
+
+// ==================== START SERVER ====================
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`⚡ Roy server running on port ${PORT}`);
+  console.log(`- /api/chat endpoint ready`);
+  console.log(`- /api/transcribe endpoint ready`);
+  console.log(`- /api/assembly/token live (static token injected + fixed)`);
+});
