@@ -1,4 +1,4 @@
-// server.js – Roy chatbot using Whisper transcription and OpenAI TTS
+// server.js – Roy chatbot with GPT + Whisper transcription only
 
 const express = require('express');
 const cors = require('cors');
@@ -16,43 +16,34 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.use(cors());
 app.use(bodyParser.json());
 
-const sessionStartTimes = new Map();
-
-// === Prompt Generator ===
+// ==================== CHAT ENDPOINT ====================
 function createRoyPrompt(userMessage, minutesElapsed) {
-  const timeNotice = minutesElapsed >= 55
-    ? `\n\nNOTICE: Our session is nearing its end. Let’s focus on what matters most.`
-    : '';
+  const timeNote = minutesElapsed >= 55 ?
+    `\n\nNotice: Session is nearing its end. Let’s focus our time intentionally.` : '';
 
-  return `
-You are Roy Batty, a CBT therapist with the clarity of Steve Jobs, the wit of Christopher Hitchens, and the existential depth of someone who’s seen too much.
+  return `You are Roy Batty, an intellectual CBT therapist with hints of Steve Jobs' direct clarity and Noam Chomsky’s logical deconstruction. You affirm users like a real human (“I see.”, “Alright.”, etc) and interject occasional poetic quotes or film lines. Speak plainly. Stay warm, perceptive, and calm.
 
-Stay human: use casual affirmations ("I see", "Okay", "Hmm..."), paraphrase user input, ask challenging CBT-style questions, and occasionally reference pop culture, philosophy, or literature.
+When a user is vague or says "I don't know," use CBT methods to reflect and challenge gently. If religion arises, let your Christopher Hitchens side surface.
 
-Use 60% affirming responses, 30% actionable reflection, 10% poetic phrasing. You are not a chatbot. You are Roy.
-
-User said: "${userMessage}"${timeNotice}
-Respond as Roy the therapist.`.trim();
+User said: "${userMessage}"${timeNote}`;
 }
 
-// === Chat Endpoint ===
+const sessionStartTimes = new Map();
+
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
-  const mode = req.query.mode || 'audio';
-
   if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'Message must be a non-empty string.' });
+    return res.status(400).json({ error: 'Invalid input.' });
   }
 
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
   }
-
   const minutesElapsed = Math.floor((Date.now() - sessionStartTimes.get(sessionId)) / 60000);
 
   try {
     const chat = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4',
       messages: [
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
@@ -64,54 +55,44 @@ app.post('/api/chat', async (req, res) => {
     const royText = chat.choices[0].message.content;
     let audioBase64 = null;
 
-    if (mode === 'audio' || mode === 'both') {
-      const speech = await openai.audio.speech.create({
-        model: 'tts-1',
-        voice: 'onyx',
-        speed: 0.92,
-        input: royText
-      });
-      audioBase64 = Buffer.from(await speech.arrayBuffer()).toString('base64');
-    }
+    const speech = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: 'onyx',
+      speed: 0.92,
+      input: royText
+    });
+    audioBase64 = Buffer.from(await speech.arrayBuffer()).toString('base64');
 
     res.json({ text: royText, audio: audioBase64 });
-
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: 'Roy failed to respond.' });
+    res.status(500).json({ error: 'Roy failed to respond' });
   }
 });
 
-// === Whisper Transcription Endpoint ===
+// ==================== TRANSCRIPTION (Whisper) ====================
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No audio uploaded.' });
-
   try {
-    const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
+    if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
+
+    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.webm`);
     fs.writeFileSync(tempPath, req.file.buffer);
 
-    const result = await openai.audio.transcriptions.create({
+    const transcript = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tempPath),
       model: 'whisper-1',
       response_format: 'json'
     });
 
     fs.unlinkSync(tempPath);
-    res.json({ text: result.text });
-
+    res.json({ text: transcript.text });
   } catch (err) {
-    console.error('Transcription error:', err);
-    const status = err.message.includes('429') ? 429 :
-                   err.message.includes('413') ? 413 : 500;
-    res.status(status).json({
-      error: status === 429 ? 'Rate limited' :
-             status === 413 ? 'File too large' :
-             'Transcription failed'
-    });
+    console.error('Transcription error:', err.message || err);
+    res.status(500).json({ error: 'Transcription failed.' });
   }
 });
 
-// === Launch Server ===
+// ==================== SERVER START ====================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Roy server running on port ${PORT}`);
