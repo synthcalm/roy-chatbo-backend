@@ -1,4 +1,4 @@
-// server.js – Roy chatbot with GPT + Whisper transcription only
+// server.js – Roy backend using Whisper transcription only
 
 const express = require('express');
 const cors = require('cors');
@@ -16,61 +16,65 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.use(cors());
 app.use(bodyParser.json());
 
-// ==================== CHAT ENDPOINT ====================
-function createRoyPrompt(userMessage, minutesElapsed) {
-  const timeNote = minutesElapsed >= 55 ?
-    `\n\nNotice: Session is nearing its end. Let’s focus our time intentionally.` : '';
-
-  return `You are Roy Batty, an intellectual CBT therapist with hints of Steve Jobs' direct clarity and Noam Chomsky’s logical deconstruction. You affirm users like a real human (“I see.”, “Alright.”, etc) and interject occasional poetic quotes or film lines. Speak plainly. Stay warm, perceptive, and calm.
-
-When a user is vague or says "I don't know," use CBT methods to reflect and challenge gently. If religion arises, let your Christopher Hitchens side surface.
-
-User said: "${userMessage}"${timeNote}`;
-}
-
 const sessionStartTimes = new Map();
 
-app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'default' } = req.body;
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'Invalid input.' });
+function createRoyPrompt(userMessage, minutesElapsed) {
+  let timeNote = '';
+  if (minutesElapsed >= 55) {
+    timeNote = `\n\nNOTE: We are nearing the end of this 60-minute session.`;
   }
 
+  return `You are Roy Batty, a CBT therapist with a clear, analytical mind inspired by Steve Jobs' visionary clarity and Noam Chomsky's logical depth. Your tone is direct, insightful, and motivating, with 10% poetic style and occasional references to philosophy, literature, or film. You use affirmations, paraphrasing, and CBT frameworks to guide the user. You ask reflective, binary-option, or clarifying questions. You respond firmly but with empathy. You are comfortable with silence and ready to challenge avoidance.
+
+User: ${userMessage}${timeNote}`;
+}
+
+// === Chat endpoint ===
+app.post('/api/chat', async (req, res) => {
+  const { message, sessionId = 'default-session', mode = 'audio' } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message required' });
+
+  let minutesElapsed = 0;
   if (!sessionStartTimes.has(sessionId)) {
     sessionStartTimes.set(sessionId, Date.now());
+  } else {
+    const startTime = sessionStartTimes.get(sessionId);
+    minutesElapsed = Math.floor((Date.now() - startTime) / 60000);
   }
-  const minutesElapsed = Math.floor((Date.now() - sessionStartTimes.get(sessionId)) / 60000);
 
   try {
-    const chat = await openai.chat.completions.create({
+    const chatResponse = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: createRoyPrompt(message, minutesElapsed) },
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: 700
+      max_tokens: 750
     });
 
-    const royText = chat.choices[0].message.content;
+    const royText = chatResponse.choices[0].message.content;
+
     let audioBase64 = null;
+    if (mode === 'audio' || mode === 'both') {
+      const speechResponse = await openai.audio.speech.create({
+        model: 'tts-1-hd',
+        voice: 'onyx',
+        speed: 1.0,
+        input: royText
+      });
+      const buffer = Buffer.from(await speechResponse.arrayBuffer());
+      audioBase64 = buffer.toString('base64');
+    }
 
-    const speech = await openai.audio.speech.create({
-      model: 'tts-1',
-      voice: 'onyx',
-      speed: 0.92,
-      input: royText
-    });
-    audioBase64 = Buffer.from(await speech.arrayBuffer()).toString('base64');
-
-    res.json({ text: royText, audio: audioBase64 });
+    res.json({ text: royText, audio: audioBase64, minutesElapsed });
   } catch (err) {
-    console.error('Chat error:', err);
-    res.status(500).json({ error: 'Roy failed to respond' });
+    console.error('Roy error:', err.message || err);
+    res.status(500).json({ error: 'Roy failed to respond.' });
   }
 });
 
-// ==================== TRANSCRIPTION (Whisper) ====================
+// === Transcription endpoint (Whisper only) ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
@@ -92,8 +96,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// ==================== SERVER START ====================
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`✅ Roy server running on port ${PORT}`);
 });
