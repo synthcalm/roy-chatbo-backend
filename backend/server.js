@@ -49,10 +49,10 @@ app.get('/api/assembly/token', async (req, res) => {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${ASSEMBLYAI_API_KEY}`, // Correct format for AssemblyAI
+        'Authorization': `Bearer ${ASSEMBLYAI_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ expires_in: 3600 }) // Token valid for 1 hour
+      body: JSON.stringify({ expires_in: 3600 })
     });
 
     if (!response.ok) {
@@ -163,7 +163,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 });
 
 // ==================== START SERVER ====================
-const PORT = process.env.PORT || 10000; // Match the port from deployment logs
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`⚡ Roy server running on port ${PORT}`);
   console.log(`- /api/chat endpoint ready`);
