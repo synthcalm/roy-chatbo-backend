@@ -1,7 +1,7 @@
 {
-  "name": "stability-image-backend",
+  "name": "roy-chatbot-backend",
   "version": "1.0.0",
-  "description": "Backend for Mood Into Art using Stability and AssemblyAI",
+  "description": "Backend for Roy chatbot using OpenAI GPT and Whisper transcription",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
