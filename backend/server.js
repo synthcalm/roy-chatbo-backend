@@ -7,7 +7,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const fetch = require('node-fetch'); // required for external requests
+const fetch = require('node-fetch');
 const { OpenAI } = require('openai');
 
 const app = express();
@@ -39,7 +39,8 @@ app.get('/api/assembly/token', async (req, res) => {
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
       method: 'POST',
       headers: {
-        authorization: ASSEMBLYAI_TOKEN
+        authorization: ASSEMBLYAI_TOKEN,
+        'Content-Type': 'application/json' // ✅ REQUIRED FIX
       }
     });
 
@@ -49,6 +50,7 @@ app.get('/api/assembly/token', async (req, res) => {
 
     const data = await response.json();
     res.json({ token: data.token });
+
   } catch (err) {
     console.error('AssemblyAI token generation error:', err);
     res.status(500).json({ error: 'Token generation failed' });
@@ -113,46 +115,3 @@ app.post('/api/chat', async (req, res) => {
     const status = err.message.includes('429') ? 429 : 500;
     res.status(status).json({
       error: status === 429 ? 'Rate limit exceeded' : 'Roy failed to respond'
-    });
-  }
-});
-
-// ==================== TRANSCRIPTION UPLOAD ====================
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No audio uploaded.' });
-  }
-
-  try {
-    const tempPath = path.join(os.tmpdir(), `voice-${Date.now()}.webm`);
-    fs.writeFileSync(tempPath, req.file.buffer);
-
-    const result = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(tempPath),
-      model: 'whisper-1',
-      response_format: 'json'
-    });
-
-    fs.unlinkSync(tempPath);
-    res.json({ text: result.text });
-
-  } catch (err) {
-    console.error('Transcription error:', err);
-    const status = err.message.includes('429') ? 429 :
-                   err.message.includes('413') ? 413 : 500;
-    res.status(status).json({
-      error: status === 429 ? 'Rate limited' :
-             status === 413 ? 'File too large' :
-             'Transcription failed'
-    });
-  }
-});
-
-// ==================== START SERVER ====================
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`⚡ Roy server running on port ${PORT}`);
-  console.log(`- /api/chat endpoint ready`);
-  console.log(`- /api/transcribe endpoint ready`);
-  console.log(`- /api/assembly/token live (static token injected)`);
-});
