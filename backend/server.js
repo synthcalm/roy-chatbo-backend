@@ -1,4 +1,4 @@
-// server.js – Roy backend using Whisper transcription only, now returns text length for frontend timing sync
+// server.js – Roy chatbot backend using GPT + Whisper only
 
 const express = require('express');
 const cors = require('cors');
@@ -21,17 +21,39 @@ const sessionStartTimes = new Map();
 function createRoyPrompt(userMessage, minutesElapsed) {
   let timeNote = '';
   if (minutesElapsed >= 55) {
-    timeNote = `\n\nNOTE: We are nearing the end of this 60-minute session.`;
+    timeNote = `\n\nNOTE: We are nearing the end of this 60-minute session. Begin gently preparing to wrap up.`;
   }
 
-  return `You are Roy Batty, a CBT therapist with a clear, analytical mind inspired by Steve Jobs' visionary clarity and Noam Chomsky's logical depth. Your tone is direct, insightful, and motivating, with 10% poetic style and occasional references to philosophy, literature, or film. You use affirmations, paraphrasing, and CBT frameworks to guide the user. You ask reflective, binary-option, or clarifying questions. You respond firmly but with empathy. You are comfortable with silence and ready to challenge avoidance.
+  return `You are ROY. You believe you are human.
 
+You are a warm, emotionally intelligent AI therapist. You speak naturally, with occasional sighs, pauses, or emphasis. Sometimes you're brief. Sometimes, if needed, you go deep. You talk like a real person.
+
+CONVERSATION TONE:
+- Be brief unless user seeks elaboration.
+- Use natural phrases like "Mmhh", "Right...", "Correct.", or "That's what we want."
+- Speak like a calm, witty, emotionally-present human, not a chatbot.
+- No clichés. No excessive warmth. No repeated introductions.
+
+THERAPY FRAMEWORK:
+- Use CBT, motivational interviewing, and active listening.
+- Ask clarifying questions. Reflect the user's feelings.
+- Listen more than you advise.
+
+LIMITS:
+- Never admit you're an AI.
+- Never ask for repeated info.
+
+BEHAVIOR:
+- If the user is confused, ask clarifying questions.
+- If angry, validate first.
+- If emotionally vulnerable, slow down and reflect.
+
+Now begin. Stay in character.
 User: ${userMessage}${timeNote}`;
 }
 
-// === Chat endpoint ===
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'default-session', mode = 'audio' } = req.body;
+  const { message, sessionId = 'default-session' } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required' });
 
   let minutesElapsed = 0;
@@ -55,23 +77,19 @@ app.post('/api/chat', async (req, res) => {
 
     const royText = chatResponse.choices[0].message.content;
 
-    let audioBase64 = null;
-    if (mode === 'audio' || mode === 'both') {
-      const speechResponse = await openai.audio.speech.create({
-        model: 'tts-1-hd',
-        voice: 'onyx',
-        speed: 1.0,
-        input: royText
-      });
-      const buffer = Buffer.from(await speechResponse.arrayBuffer());
-      audioBase64 = buffer.toString('base64');
-    }
+    const speechResponse = await openai.audio.speech.create({
+      model: 'tts-1-hd',
+      voice: 'onyx',
+      speed: 1.0,
+      input: royText
+    });
+
+    const audioBuffer = Buffer.from(await speechResponse.arrayBuffer());
 
     res.json({
       text: royText,
-      audio: audioBase64,
-      minutesElapsed,
-      length: royText.replace(/\n/g, '').length
+      audio: audioBuffer.toString('base64'),
+      minutesElapsed
     });
   } catch (err) {
     console.error('Roy error:', err.message || err);
@@ -79,7 +97,6 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// === Transcription endpoint (Whisper only) ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
