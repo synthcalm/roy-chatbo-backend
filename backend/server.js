@@ -71,7 +71,7 @@ app.post('/api/chat', async (req, res) => {
       text: royText,
       audio: audioBase64,
       minutesElapsed,
-      length: royText.length
+      length: royText.replace(/\n/g, '').length
     });
   } catch (err) {
     console.error('Roy error:', err.message || err);
