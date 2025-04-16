@@ -54,17 +54,23 @@ app.post('/api/chat', async (req, res) => {
     });
 
     const royText = chat.choices[0].message.content;
+    console.log('Roy response text:', royText);
 
     let audioBase64 = null;
     if (mode === 'voice' || mode === 'both') {
-      const audio = await openai.audio.speech.create({
-        model: 'tts-1',
-        voice: 'onyx',
-        speed: 0.92,
-        input: royText
-      });
-      const buffer = Buffer.from(await audio.arrayBuffer());
-      audioBase64 = buffer.toString('base64');
+      try {
+        const audio = await openai.audio.speech.create({
+          model: 'tts-1',
+          voice: 'onyx',
+          speed: 0.92,
+          input: royText
+        });
+        const buffer = Buffer.from(await audio.arrayBuffer());
+        audioBase64 = buffer.toString('base64');
+        console.log('Audio successfully created. Base64 size:', audioBase64.length);
+      } catch (audioErr) {
+        console.error('TTS generation failed:', audioErr.message || audioErr);
+      }
     }
 
     res.json({ text: royText, audio: audioBase64 });
@@ -74,7 +80,6 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// === TRANSCRIPTION ENDPOINT ===
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio uploaded' });
