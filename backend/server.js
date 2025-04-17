@@ -14,7 +14,11 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     const transcription = await openai.audio.transcriptions.create({
-      file: req.file.buffer,
+      file: {
+        buffer: req.file.buffer,
+        name: 'audio.webm',
+        type: req.file.mimetype
+      },
       model: 'whisper-1',
       response_format: 'json'
     });
