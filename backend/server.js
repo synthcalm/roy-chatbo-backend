@@ -1,13 +1,29 @@
 
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const { OpenAI } = require('openai');
 
 const app = express();
+const upload = multer();
 app.use(cors());
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    const transcription = await openai.audio.transcriptions.create({
+      file: req.file.buffer,
+      model: 'whisper-1',
+      response_format: 'json'
+    });
+    res.json({ text: transcription.text });
+  } catch (err) {
+    console.error('Whisper error:', err);
+    res.status(500).json({ error: 'Whisper transcription failed' });
+  }
+});
 
 app.post('/api/chat', async (req, res) => {
   const { message, mode = 'both' } = req.body;
@@ -16,7 +32,7 @@ app.post('/api/chat', async (req, res) => {
     const chat = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
-        { role: 'system', content: "You're Roy, a calm and reflective AI therapist. Speak kindly and briefly." },
+        { role: 'system', content: "You're Roy, a calming AI therapist. Speak briefly and supportively." },
         { role: 'user', content: message }
       ]
     });
