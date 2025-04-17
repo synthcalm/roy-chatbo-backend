@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -11,17 +10,19 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Whisper transcription using proper multipart format
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     const transcription = await openai.audio.transcriptions.create({
       file: {
-        buffer: req.file.buffer,
-        name: 'audio.webm',
-        type: req.file.mimetype
+        name: "audio.webm",
+        type: req.file.mimetype,
+        data: req.file.buffer
       },
       model: 'whisper-1',
       response_format: 'json'
     });
+
     res.json({ text: transcription.text });
   } catch (err) {
     console.error('Whisper error:', err);
@@ -29,6 +30,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
+// Roy's chat + optional audio TTS response
 app.post('/api/chat', async (req, res) => {
   const { message, mode = 'both' } = req.body;
 
