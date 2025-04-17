@@ -16,7 +16,7 @@ app.post('/api/chat', async (req, res) => {
     const chat = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
-        { role: 'system', content: "You're Roy, a thoughtful voice-based therapist. Be brief and reflective." },
+        { role: 'system', content: "You're Roy, a calm and reflective AI therapist. Speak kindly and briefly." },
         { role: 'user', content: message }
       ]
     });
