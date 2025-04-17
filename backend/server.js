@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const axios = require('axios');
+const FormData = require('form-data');
 const { OpenAI } = require('openai');
 
 const app = express();
@@ -10,27 +12,34 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Whisper transcription using proper multipart format
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
-    const transcription = await openai.audio.transcriptions.create({
-      file: {
-        name: "audio.webm",
-        type: req.file.mimetype,
-        data: req.file.buffer
-      },
-      model: 'whisper-1',
-      response_format: 'json'
+    const form = new FormData();
+    form.append('file', req.file.buffer, {
+      filename: 'audio.webm',
+      contentType: req.file.mimetype,
     });
+    form.append('model', 'whisper-1');
+    form.append('response_format', 'json');
 
-    res.json({ text: transcription.text });
+    const response = await axios.post(
+      'https://api.openai.com/v1/audio/transcriptions',
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
+
+    res.json({ text: response.data.text });
   } catch (err) {
-    console.error('Whisper error:', err);
+    console.error('Whisper error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Whisper transcription failed' });
   }
 });
 
-// Roy's chat + optional audio TTS response
 app.post('/api/chat', async (req, res) => {
   const { message, mode = 'both' } = req.body;
 
