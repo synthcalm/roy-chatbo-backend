@@ -11,7 +11,7 @@ const NodeCache = require('node-cache');
 const app = express();
 const upload = multer();
 const cache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes
-app.use(cors());
+app.use(cors({ origin: 'https://synthcalm.github.io' }));
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -105,9 +105,12 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   const { message, mode = 'both', persona = 'default', volumeData = [], context = royKnowledge } = req.body;
 
+  console.log('Received /api/chat request:', { message, mode, persona, volumeDataLength: volumeData.length });
+
   const cacheKey = `${persona}:${message.slice(0, 50)}`;
   const cachedResponse = cache.get(cacheKey);
   if (cachedResponse) {
+    console.log('Returning cached response for:', cacheKey);
     return res.json(cachedResponse);
   }
 
@@ -131,9 +134,11 @@ Tone: bold, slightly irreverent, highly supportive.
 Traits: fearless, validating, energetic.
 Avoid clinical or overly gentle language. Keep responses concise and punchy.
 `;
+      console.log('Using Randy persona with prompt:', systemPrompt.slice(0, 100) + '...');
 
       // Analyze audio for emotions during rant
       const emotion = analyzeAudioForEmotion(volumeData, message);
+      console.log('Detected emotion:', emotion);
       if (emotion === 'silence') {
         royText = 'I’m here—take your time, let it out when you’re ready.';
         isInterimResponse = true;
@@ -144,15 +149,8 @@ Avoid clinical or overly gentle language. Keep responses concise and punchy.
         royText = 'Whoa, let’s pause—this sounds heavy. Take a deep breath and call someone you trust for help, okay?';
         isInterimResponse = true;
       }
-    }
-
-    if (!isInterimResponse) {
-      if (persona === 'randy') {
-        // Post-rant: Offer wisdom and suggest features
-        const wisdom = generateWisdom(message);
-        royText = `That was a fiery rant—well done! Here’s some food for thought: ${wisdom} Feeling lighter? Why not try my Quest Mode to channel that energy into a heroic journey?`;
-      } else {
-        systemPrompt += `
+    } else {
+      systemPrompt += `
 Tone: ${context.persona?.tone || 'assertive-poetic'}
 Traits: ${context.persona?.traits?.join(', ') || 'empathic, goal-oriented, unpredictable'}
 Therapy methods: ${context.therapy_methods?.join(', ') || 'CBT, Taoism, Zen'}
@@ -160,6 +158,16 @@ Life stressors: ${context.life_stressors?.join(', ') || 'grief, anxiety, lonelin
 If a user mentions art, say "That's like Rembrandt met TikTok in a neon alleyway."
 If someone speaks of stress, quip "Ah, stress—the unpaid intern of modern life."
 `;
+      console.log('Using Roy persona with prompt:', systemPrompt.slice(0, 100) + '...');
+    }
+
+    if (!isInterimResponse) {
+      if (persona === 'randy') {
+        // Post-rant: Offer wisdom and suggest features
+        const wisdom = generateWisdom(message);
+        royText = `That was a fiery rant—well done! Here’s some food for thought: ${wisdom} Feeling lighter? Why not try my Quest Mode to channel that energy into a heroic journey?`;
+        console.log('Randy post-rant response:', royText);
+      } else {
         const chat = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
@@ -168,6 +176,7 @@ If someone speaks of stress, quip "Ah, stress—the unpaid intern of modern life
           ]
         });
         royText = chat.choices[0].message.content;
+        console.log('Roy response:', royText);
       }
     }
 
