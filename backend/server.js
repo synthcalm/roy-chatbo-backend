@@ -9,12 +9,17 @@ const path = require('path');
 const NodeCache = require('node-cache');
 
 const app = express();
+
+// ✅ CORS fix: MUST be first middleware
+app.use(cors()); // Temporarily allow all origins
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*'); // force include
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
+
 const upload = multer();
 const cache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes
-
-// 🔓 Open CORS for all origins (TEMPORARY FOR DEBUGGING)
-app.use(cors());
-
 app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
