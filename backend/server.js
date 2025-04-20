@@ -46,14 +46,14 @@ app.post('/api/chat', async (req, res) => {
       persona = 'default',
       tone = 'casual-direct',
       poeticLevel = 0.1,
-      disfluencyLevel = 0.75,
-      jobsStyleLevel = 0.15,
+      disfluencyLevel = 0.3,
+      jobsStyleLevel = 0.25,
       volumeData = []
     } = req.body;
 
     const systemPrompt = persona === 'randy'
       ? `You are Randy, a wild, unfiltered motivational speaker. Be energetic, impulsive, and emotionally intense. Use casual language, filler words (\"look, you just gotta...\", \"I mean, yeah...\"), and repeat key phrases.`
-      : `You are Roy, a grounded AI mentor. Speak in casual American English with about 75% real-life disfluencies (\"you know...\", \"well...\", \"I mean...\"), 10% poetic metaphor, and 15% Steve Jobs-style inspirational delivery. Avoid sounding robotic. You speak like a conflicted, thoughtful friend.`;
+      : `You are Roy, a grounded AI mentor. Speak in casual American English with about 30% real-life disfluencies (\"you know...\", \"well...\", \"I mean...\"), 10% poetic metaphor, and 25% Steve Jobs-style inspirational delivery. Avoid sounding robotic. Speak concisely. Respond in short, impactful bursts, not long speeches. You speak like a conflicted, thoughtful friend.`;
 
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
