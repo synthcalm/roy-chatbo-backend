@@ -30,11 +30,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
 
     const supportedMimeTypes = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/flac', 'audio/ogg', 'audio/m4a'];
-    if (!supportedMimeTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({ error: `Unsupported file format: ${req.file.mimetype}` });
+    const actualMimeType = req.file.mimetype || 'audio/webm';
+
+    if (!supportedMimeTypes.includes(actualMimeType)) {
+      return res.status(400).json({ error: `Unsupported file format: ${actualMimeType}` });
     }
 
-    const extension = req.file.mimetype.split('/')[1] || 'webm';
+    const extension = actualMimeType.split('/')[1] || 'webm';
     const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.${extension}`);
     fs.writeFileSync(tempPath, req.file.buffer);
 
