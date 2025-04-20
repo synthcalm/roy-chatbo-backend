@@ -29,7 +29,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file received.' });
 
-    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.webm`);
+    const supportedMimeTypes = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/flac', 'audio/ogg', 'audio/m4a'];
+    if (!supportedMimeTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: `Unsupported file format: ${req.file.mimetype}` });
+    }
+
+    const extension = req.file.mimetype.split('/')[1] || 'webm';
+    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.${extension}`);
     fs.writeFileSync(tempPath, req.file.buffer);
 
     const transcript = await openai.audio.transcriptions.create({
@@ -48,6 +54,10 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
 // ✅ Roy's AI Persona Chat Endpoint
 app.post('/api/chat', async (req, res) => {
+  const { message } = req.body;
+  if (!message || typeof message !== 'string' || message.trim().toLowerCase() === 'undefined') {
+    return res.status(200).json({ text: "Hmm. I didn’t catch that. Mind trying again, but slower this time?" });
+  }
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'No message provided.' });
 
