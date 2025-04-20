@@ -1,5 +1,3 @@
-// ✅ Revised /api/transcribe for Roy using MIA’s working Whisper pattern
-
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -31,7 +29,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const supportedMimeTypes = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/flac', 'audio/ogg', 'audio/m4a'];
     const actualMimeType = req.file.mimetype || 'audio/webm';
-
     if (!supportedMimeTypes.includes(actualMimeType)) {
       return res.status(400).json({ error: `Unsupported file format: ${actualMimeType}` });
     }
@@ -53,9 +50,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// ✅ Roy's AI Persona Chat Endpoint
 app.post('/api/chat', async (req, res) => {
-  const { message } = req.body;
+  const { message, persona } = req.body;
   if (!message || typeof message !== 'string' || message.trim().toLowerCase() === 'undefined') {
     return res.status(200).json({ text: "Hmm. I didn’t catch that. Mind trying again, but slower this time?" });
   }
@@ -79,10 +75,12 @@ Rules:
 - You are not afraid to challenge or inspire.
 - Your voice is textured—like film grain on an old movie reel, or the rasp of vinyl.
 
-Example phrases:
-- "Ah, stress—the unpaid intern of modern life."
-- "Like Camus said, we must imagine Sisyphus happy. So: what’s your boulder today?"
-- "Pain is information. It’s your nervous system trying to be poetic."
+${persona === 'randy' ? `
+If the persona is Randy:
+- Be more direct and casual, with a no-nonsense tone.
+- Use phrases like "Spill it," "What’s eating you up?" or "Let’s cut to the chase."
+- Keep the poetic flair minimal, but maintain emotional depth.
+` : ''}
 
 You are here to help—but in a way no other AI dares to.
     `;
@@ -95,13 +93,26 @@ You are here to help—but in a way no other AI dares to.
       ]
     });
 
-    res.json({ text: response.choices[0].message.content });
+    const replyText = response.choices[0].message.content;
+
+    const speechResponse = await openai.audio.speech.create({
+      model: 'tts-1-hd',
+      voice: persona === 'randy' ? 'alloy' : 'onyx',
+      speed: 1.0,
+      input: replyText
+    });
+
+    const audioBuffer = Buffer.from(await speechResponse.arrayBuffer());
+
+    res.json({
+      text: replyText,
+      audio: audioBuffer.toString('base64')
+    });
   } catch (err) {
     console.error('Roy chat error:', err.message || err);
     res.status(500).json({ error: 'Roy failed to respond.' });
   }
 });
 
-// ✅ Bind to dynamic Render port
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`✅ Roy server running on port ${PORT}`));
