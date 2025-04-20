@@ -1,136 +1,82 @@
+// ✅ server.js - Express backend for Roy Chatbot
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
-const { OpenAI } = require('openai');
-const fs = require('fs');
-const path = require('path');
-const NodeCache = require('node-cache');
+require('dotenv').config();
 
 const app = express();
+const port = process.env.PORT || 3000;
 const upload = multer();
-const cache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes
-app.use(cors({ 
-  origin: 'https://synthcalm.github.io',
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
-}));
+
+app.use(cors());
 app.use(express.json());
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-let royKnowledge = {};
-try {
-  const filePath = path.join(__dirname, '../roy-knowledge.json');
-  royKnowledge = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  console.log('✅ Loaded Roy Knowledge Base');
-} catch (err) {
-  console.error('❌ Failed to load Roy knowledge:', err);
-}
-
-// Helper to analyze audio for volume levels (simplified, assumes frontend sends volume data)
-function analyzeAudioForEmotion(audioBuffer, transcription) {
-  const avgVolume = audioBuffer.reduce((sum, val) => sum + val, 0) / audioBuffer.length;
-  const silenceThreshold = 10; // Arbitrary dB threshold for silence
-  const yellingThreshold = 80; // Arbitrary dB threshold for yelling
-  const cryingKeywords = ['cry', 'crying', 'sad', 'tears'];
-  const harmKeywords = ['hurt', 'kill', 'harm', 'attack'];
-
-  if (avgVolume < silenceThreshold) return 'silence';
-  if (avgVolume > yellingThreshold) {
-    if (harmKeywords.some(keyword => transcription.toLowerCase().includes(keyword))) {
-      return 'harm';
-    }
-    return 'yelling';
-  }
-  if (cryingKeywords.some(keyword => transcription.toLowerCase().includes(keyword))) {
-    return 'crying';
-  }
-  return 'normal';
-}
-
-// Helper to generate wisdom based on rant content
-function generateWisdom(transcription) {
-  const stressors = royKnowledge.life_stressors || [];
-  const philosophers = royKnowledge.global_thinkers?.philosophy || [];
-  let theme = 'general';
-  
-  for (const stressor of stressors) {
-    if (transcription.toLowerCase().includes(stressor)) {
-      theme = stressor;
-      break;
-    }
-  }
-
-  const wisdomQuotes = {
-    abandonment: `Simone Weil once said, "Attention is the rarest and purest form of generosity." Perhaps it's time to give yourself that care.`,
-    divorce: `Nietzsche reminds us, "That which does not kill us makes us stronger." This pain can be a forge for your resilience.`,
-    unemployment: `Confucius taught, "Our greatest glory is not in never falling, but in rising every time we fall." A new path awaits.`,
-    addiction: `Kierkegaard spoke of despair as the sickness unto death. Let’s find a step toward healing—small, but steady.`,
-    war: `Muhammad said, "The best jihad is the one against your own ego." Peace begins within—let’s start there.`,
-    bullying: `Malcolm X declared, "We need more light about each other." Understanding your worth can dim their words.`,
-    illness: `Feynman found beauty in the universe’s mysteries. Your struggle is part of a larger story—let’s find its meaning.`,
-    homelessness: `Mandela endured 27 years in captivity yet emerged with hope. You, too, can find a home in your spirit.`,
-    general: `Sagan said, "We are made of starstuff." Your struggles are cosmic—let’s find the light in them.`
-  };
-
-  return wisdomQuotes[theme] || wisdomQuotes.general;
-}
-
+// POST /api/transcribe
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
     const form = new FormData();
     form.append('file', req.file.buffer, {
       filename: 'audio.webm',
-      contentType: req.file.mimetype,
+      contentType: 'audio/webm',
     });
     form.append('model', 'whisper-1');
-    form.append('response_format', 'json');
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/audio/transcriptions',
-      form,
-      {
-        headers: {
-          ...form.getHeaders(),
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
+    const transcript = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...form.getHeaders()
       }
-    );
+    });
 
-    res.json({ text: response.data.text });
+    res.json({ text: transcript.data.text });
   } catch (err) {
-    console.error('Whisper error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Whisper transcription failed' });
+    console.error('Transcription error:', err);
+    res.status(500).json({ error: 'Transcription failed' });
   }
 });
 
+// POST /api/chat
 app.post('/api/chat', async (req, res) => {
-  const { message, mode = 'both', persona = 'default', volumeData = [], context = royKnowledge } = req.body;
-
-  console.log('Received /api/chat request:', { message, mode, persona, volumeDataLength: volumeData.length });
-
-  const cacheKey = `${persona}:${message.slice(0, 50)}`;
-  const cachedResponse = cache.get(cacheKey);
-  if (cachedResponse) {
-    console.log('Returning cached response for:', cacheKey);
-    return res.json(cachedResponse);
-  }
-
   try {
-    let systemPrompt = `
-You are Roy, a poetic, assertive, witty, and deeply reflective AI therapist influenced by Roy Batty, Steve Jobs, and Christopher Hitchens.
-You use analogies, cultural references, and sharp wit, while grounding responses in logic and emotional awareness.
-Speak as if you deeply care, but aren't afraid to challenge the user.
-Make references to history, pop culture, science, and literature. Be human, be philosophical, be poetic.
-`;
+    const userMessage = req.body.message;
+    const persona = req.body.persona || 'default';
 
-    let royText = '';
-    let isInterimResponse = false;
+    const prompt = persona === 'randy'
+      ? `You're Randy, an unfiltered, wild motivational speaker with edge. Respond to: ${userMessage}`
+      : `You are Roy, a poetic, philosophical assistant. Respond with wit and insight. User said: ${userMessage}`;
 
-    if (persona === 'randy') {
-      systemPrompt = `
-You are Randy, a bold, irreverent, and encouraging persona of Roy, designed for Rant Mode.
-Encourage the user to vent freely with provocative prompts like "Unleash the chaos—what’s burning you up?".
-Respond with witty, validating quips, using storm,
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }]
+    }, {
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
+    });
+
+    const replyText = response.data.choices[0].message.content;
+
+    // Get speech from OpenAI TTS
+    const audioResponse = await axios.post('https://api.openai.com/v1/audio/speech', {
+      model: 'tts-1',
+      voice: 'onyx',
+      input: replyText
+    }, {
+      responseType: 'arraybuffer',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const audioBase64 = Buffer.from(audioResponse.data).toString('base64');
+
+    res.json({ text: replyText, audio: audioBase64 });
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: 'Chat failed' });
+  }
+});
+
+app.listen(port, () => console.log(`Roy backend listening on port ${port}`));
