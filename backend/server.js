@@ -20,7 +20,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     const form = new FormData();
     form.append('file', req.file.buffer, {
       filename: 'audio.webm',
-      contentType: 'audio/webm',
+      contentType: 'audio/webm'
     });
     form.append('model', 'whisper-1');
 
@@ -33,8 +33,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     res.json({ text: transcript.data.text });
   } catch (err) {
-    console.error('Transcription error:', err);
-    res.status(500).json({ error: 'Transcription failed' });
+    console.error('Transcription error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Transcription failed', detail: err.response?.data });
   }
 });
 
