@@ -58,7 +58,9 @@ app.post('/api/chat', async (req, res) => {
   if (!message || typeof message !== 'string' || message.trim().toLowerCase() === 'undefined') {
     return res.status(200).json({ text: "Hmm. I didn’t catch that. Mind trying again, but slower this time?" });
   }
-  });
+
+
+});
   }
   
 
