@@ -36,8 +36,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       return res.status(400).json({ error: `Unsupported file format: ${actualMimeType}` });
     }
 
-    const extension = actualMimeType.split('/')[1] || 'webm';
-    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.${extension}`);
+    const tempPath = path.join(os.tmpdir(), `temp-${Date.now()}.mp4`);
     fs.writeFileSync(tempPath, req.file.buffer);
 
     const transcript = await openai.audio.transcriptions.create({
