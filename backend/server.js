@@ -41,23 +41,32 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 // POST /api/chat
 app.post('/api/chat', async (req, res) => {
   try {
-    const userMessage = req.body.message;
-    const persona = req.body.persona || 'default';
+    const {
+      message,
+      persona = 'default',
+      tone = 'casual-direct',
+      poeticLevel = 0.1,
+      disfluencyLevel = 0.75,
+      jobsStyleLevel = 0.15,
+      volumeData = []
+    } = req.body;
 
-    const prompt = persona === 'randy'
-      ? `You're Randy, an unfiltered, wild motivational speaker with edge. Respond to: ${userMessage}`
-      : `You are Roy, a poetic, philosophical assistant. Respond with wit and insight. User said: ${userMessage}`;
+    const systemPrompt = persona === 'randy'
+      ? `You are Randy, a wild, unfiltered motivational speaker. Be energetic, impulsive, and emotionally intense. Use casual language, filler words (\"look, you just gotta...\", \"I mean, yeah...\"), and repeat key phrases.`
+      : `You are Roy, a grounded AI mentor. Speak in casual American English with about 75% real-life disfluencies (\"you know...\", \"well...\", \"I mean...\"), 10% poetic metaphor, and 15% Steve Jobs-style inspirational delivery. Avoid sounding robotic. You speak like a conflicted, thoughtful friend.`;
 
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ]
     }, {
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
     });
 
     const replyText = response.data.choices[0].message.content;
 
-    // Get speech from OpenAI TTS
     const audioResponse = await axios.post('https://api.openai.com/v1/audio/speech', {
       model: 'tts-1',
       voice: 'onyx',
@@ -71,11 +80,10 @@ app.post('/api/chat', async (req, res) => {
     });
 
     const audioBase64 = Buffer.from(audioResponse.data).toString('base64');
-
     res.json({ text: replyText, audio: audioBase64 });
   } catch (err) {
-    console.error('Chat error:', err);
-    res.status(500).json({ error: 'Chat failed' });
+    console.error('Chat error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Chat failed', detail: err.response?.data });
   }
 });
 
