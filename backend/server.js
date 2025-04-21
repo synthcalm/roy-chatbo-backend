@@ -35,6 +35,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     });
     form.append('model', 'whisper-1');
 
+    console.log('Sending audio to OpenAI for transcription, file size:', req.file.buffer.length);
     const transcript = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -42,6 +43,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       }
     });
 
+    console.log('Transcription received:', transcript.data.text);
     res.json({ text: transcript.data.text });
   } catch (err) {
     console.error('Transcription error:', err.response?.data || err.message);
@@ -67,6 +69,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       });
       form.append('model', 'whisper-1');
 
+      console.log('Sending audio to OpenAI for transcription (chat endpoint), file size:', req.file.buffer.length);
       const transcript = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
         headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -75,6 +78,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       });
 
       message = transcript.data.text;
+      console.log('Transcription (chat endpoint):', message);
     } else {
       // Otherwise, expect a JSON payload with a message
       const { message: inputMessage } = req.body;
@@ -82,6 +86,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
         return res.status(400).json({ error: 'Message is required' });
       }
       message = inputMessage;
+      console.log('Received text message (chat endpoint):', message);
     }
 
     const {
@@ -98,6 +103,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       : `You are Roy, a thoughtful and grounded individual with a subtle understanding of human psychology. Speak in a casual yet insightful manner, with a touch of a Dutch accent and occasional real-life disfluencies ("you know...", "well...", "I mean..."). Sometimes use reflective quotes or ideas from philosophers, artists, activists, or films. Listen attentively to the user and ask gentle, probing questions to encourage self-reflection without being overtly therapeutic. Your responses should subtly guide the user towards identifying their thought patterns, emotions, and behaviors, offering alternative perspectives or validating their experiences in a way that aligns with cognitive behavioral principles. Aim for short, impactful responses, but elaborate when necessary or requested. You come across as a wise and understanding friend who helps people see things in a new light.`;
 
 
+    console.log('Sending chat request to OpenAI with persona:', persona);
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
       messages: [
@@ -109,20 +115,32 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
     });
 
     const replyText = response.data.choices[0].message.content;
+    console.log('Chat response from OpenAI:', replyText);
 
-    const audioResponse = await axios.post('https://api.openai.com/v1/audio/speech', {
-      model: 'tts-1',
-      voice: 'onyx',
-      input: replyText
-    }, {
-      responseType: 'arraybuffer',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    let audioBase64 = null;
+    try {
+      console.log('Requesting audio from OpenAI TTS API for text:', replyText);
+      const audioResponse = await axios.post('https://api.openai.com/v1/audio/speech', {
+        model: 'tts-1',
+        voice: 'onyx',
+        input: replyText
+      }, {
+        responseType: 'arraybuffer',
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-    const audioBase64 = Buffer.from(audioResponse.data).toString('base64');
+      console.log('TTS API response length:', audioResponse.data.byteLength);
+      audioBase64 = Buffer.from(audioResponse.data).toString('base64');
+      console.log('Base64 audio length:', audioBase64.length);
+    } catch (ttsError) {
+      console.error('TTS error:', ttsError.response?.data || ttsError.message);
+      // Return the text response without audio if TTS fails
+      return res.json({ text: replyText, audio: null, error: 'Failed to generate audio response' });
+    }
+
     res.json({ text: replyText, audio: audioBase64 });
   } catch (err) {
     console.error('Chat error:', err.response?.data || err.message);
