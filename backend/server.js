@@ -9,75 +9,144 @@ const app = express();
 const port = process.env.PORT || 3000;
 const upload = multer();
 
+// AssemblyAI API setup
+const assemblyAIConfig = {
+  headers: {
+    Authorization: process.env.ASSEMBLYAI_API_KEY,
+    'Content-Type': 'application/json'
+  }
+};
+
+// OpenAI API setup
+const openAIConfig = {
+  headers: {
+    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Content-Type': 'application/json'
+  }
+};
+
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint to confirm the server is running
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
-// POST /api/transcribe
+// POST /api/transcribe - Use AssemblyAI for transcription
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set in the environment');
+    if (!process.env.ASSEMBLYAI_API_KEY) {
+      throw new Error('ASSEMBLYAI_API_KEY is not set in the environment');
     }
 
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
     }
 
+    // Upload audio file to AssemblyAI
     const form = new FormData();
-    form.append('file', req.file.buffer, {
+    form.append('audio', req.file.buffer, {
       filename: 'audio.wav',
       contentType: 'audio/wav'
     });
-    form.append('model', 'whisper-1');
 
-    console.log('Sending audio to OpenAI for transcription, file size:', req.file.buffer.length);
-    const transcript = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
+    console.log('Uploading audio to AssemblyAI, file size:', req.file.buffer.length);
+    const uploadResponse = await axios.post('https://api.assemblyai.com/v2/upload', form, {
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...form.getHeaders()
+        ...form.getHeaders(),
+        Authorization: process.env.ASSEMBLYAI_API_KEY
       }
     });
 
-    console.log('Transcription received:', transcript.data.text);
-    res.json({ text: transcript.data.text });
+    const audioUrl = uploadResponse.data.upload_url;
+    console.log('Audio uploaded to AssemblyAI, URL:', audioUrl);
+
+    // Request transcription
+    const transcriptResponse = await axios.post('https://api.assemblyai.com/v2/transcript', {
+      audio_url: audioUrl,
+      auto_highlights: true
+    }, assemblyAIConfig);
+
+    const transcriptId = transcriptResponse.data.id;
+    console.log('Transcription requested, ID:', transcriptId);
+
+    // Poll for transcription result
+    let transcript;
+    while (true) {
+      const statusResponse = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, assemblyAIConfig);
+      transcript = statusResponse.data;
+
+      if (transcript.status === 'completed') {
+        break;
+      } else if (transcript.status === 'failed') {
+        throw new Error('Transcription failed');
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before polling again
+    }
+
+    const userText = transcript.text || 'undefined';
+    console.log('Transcription received:', userText);
+    res.json({ text: userText });
   } catch (err) {
     console.error('Transcription error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Transcription failed', detail: err.response?.data || err.message });
   }
 });
 
-// POST /api/chat
+// POST /api/chat - Use AssemblyAI transcription and OpenAI TTS
 app.post('/api/chat', upload.single('audio'), async (req, res) => {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set in the environment');
+    if (!process.env.ASSEMBLYAI_API_KEY || !process.env.OPENAI_API_KEY) {
+      throw new Error('ASSEMBLYAI_API_KEY or OPENAI_API_KEY is not set in the environment');
     }
 
     let message;
 
     // Check if the request contains an audio file (for transcription)
     if (req.file) {
+      // Upload audio file to AssemblyAI
       const form = new FormData();
-      form.append('file', req.file.buffer, {
+      form.append('audio', req.file.buffer, {
         filename: 'audio.wav',
         contentType: 'audio/wav'
       });
-      form.append('model', 'whisper-1');
 
-      console.log('Sending audio to OpenAI for transcription (chat endpoint), file size:', req.file.buffer.length);
-      const transcript = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
+      console.log('Uploading audio to AssemblyAI (chat endpoint), file size:', req.file.buffer.length);
+      const uploadResponse = await axios.post('https://api.assemblyai.com/v2/upload', form, {
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          ...form.getHeaders()
+          ...form.getHeaders(),
+          Authorization: process.env.ASSEMBLYAI_API_KEY
         }
       });
 
-      message = transcript.data.text;
+      const audioUrl = uploadResponse.data.upload_url;
+      console.log('Audio uploaded to AssemblyAI (chat endpoint), URL:', audioUrl);
+
+      // Request transcription
+      const transcriptResponse = await axios.post('https://api.assemblyai.com/v2/transcript', {
+        audio_url: audioUrl,
+        auto_highlights: true
+      }, assemblyAIConfig);
+
+      const transcriptId = transcriptResponse.data.id;
+      console.log('Transcription requested (chat endpoint), ID:', transcriptId);
+
+      // Poll for transcription result
+      let transcript;
+      while (true) {
+        const statusResponse = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, assemblyAIConfig);
+        transcript = statusResponse.data;
+
+        if (transcript.status === 'completed') {
+          break;
+        } else if (transcript.status === 'failed') {
+          throw new Error('Transcription failed');
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before polling again
+      }
+
+      message = transcript.text || 'undefined';
       console.log('Transcription (chat endpoint):', message);
     } else {
       // Otherwise, expect a JSON payload with a message
@@ -102,7 +171,6 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       ? `You are Randy, an unfiltered, intense speaker who sounds like a cross between a renegade poet and a street prophet. Speak in gritty, cinematic language. Channel a raw, prophetic tone like the 'tears in rain' monologue. No sugar-coating. Punch hard with words. Keep your style 60% film noir, 40% urgent reality. Every reply should feel like the final scene of a cult movie. After each rant, check in on the user—ask how they’re doing, reflect on what they just shared, and wrap up with a tough-love coach insight that helps them reframe or refocus.`
       : `You are Roy, a thoughtful and grounded individual with a subtle understanding of human psychology. Speak in a casual yet insightful manner, with a touch of a Dutch accent and occasional real-life disfluencies ("you know...", "well...", "I mean..."). Sometimes use reflective quotes or ideas from philosophers, artists, activists, or films. Listen attentively to the user and ask gentle, probing questions to encourage self-reflection without being overtly therapeutic. Your responses should subtly guide the user towards identifying their thought patterns, emotions, and behaviors, offering alternative perspectives or validating their experiences in a way that aligns with cognitive behavioral principles. Aim for short, impactful responses, but elaborate when necessary or requested. You come across as a wise and understanding friend who helps people see things in a new light.`;
 
-
     console.log('Sending chat request to OpenAI with persona:', persona);
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
@@ -110,9 +178,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message }
       ]
-    }, {
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
-    });
+    }, openAIConfig);
 
     const replyText = response.data.choices[0].message.content;
     console.log('Chat response from OpenAI:', replyText);
@@ -124,17 +190,13 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
         model: 'tts-1',
         voice: 'onyx',
         input: replyText,
-        response_format: 'mp3' // Reverted to MP3
+        response_format: 'mp3'
       }, {
         responseType: 'arraybuffer',
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+        headers: openAIConfig.headers
       });
 
       console.log('TTS API response length:', audioResponse.data.byteLength);
-      // Log a snippet of the raw audio data (first 20 bytes as hex)
       const audioData = Buffer.from(audioResponse.data);
       console.log('TTS API response snippet (first 20 bytes as hex):', audioData.slice(0, 20).toString('hex'));
       audioBase64 = audioData.toString('base64');
@@ -142,7 +204,6 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       console.log('Base64 audio snippet (first 50 chars):', audioBase64.substring(0, 50));
     } catch (ttsError) {
       console.error('TTS error:', ttsError.response?.data || ttsError.message);
-      // Return the text response without audio if TTS fails
       return res.json({ text: replyText, audio: null, error: 'Failed to generate audio response' });
     }
 
