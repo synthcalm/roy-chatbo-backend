@@ -30,8 +30,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const form = new FormData();
     form.append('file', req.file.buffer, {
-      filename: 'audio.webm',
-      contentType: 'audio/webm'
+      filename: 'audio.wav',
+      contentType: 'audio/wav'
     });
     form.append('model', 'whisper-1');
 
@@ -62,8 +62,8 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
     if (req.file) {
       const form = new FormData();
       form.append('file', req.file.buffer, {
-        filename: 'audio.webm',
-        contentType: 'audio/webm'
+        filename: 'audio.wav',
+        contentType: 'audio/wav'
       });
       form.append('model', 'whisper-1');
 
