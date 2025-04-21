@@ -12,7 +12,7 @@ const upload = multer();
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoint to confirm the server is running
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
@@ -30,8 +30,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const form = new FormData();
     form.append('file', req.file.buffer, {
-      filename: 'audio.webm',
-      contentType: 'audio/webm'
+      filename: req.file.originalname || 'audio.m4a',
+      contentType: req.file.mimetype || 'audio/m4a'
     });
     form.append('model', 'whisper-1');
 
@@ -58,12 +58,11 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
 
     let message;
 
-    // Check if the request contains an audio file (for transcription)
     if (req.file) {
       const form = new FormData();
       form.append('file', req.file.buffer, {
-        filename: 'audio.webm',
-        contentType: 'audio/webm'
+        filename: req.file.originalname || 'audio.m4a',
+        contentType: req.file.mimetype || 'audio/m4a'
       });
       form.append('model', 'whisper-1');
 
@@ -76,7 +75,6 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
 
       message = transcript.data.text;
     } else {
-      // Otherwise, expect a JSON payload with a message
       const { message: inputMessage } = req.body;
       if (!inputMessage) {
         return res.status(400).json({ error: 'Message is required' });
@@ -95,7 +93,16 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
 
     const systemPrompt = persona === 'randy'
       ? `You are Randy, an unfiltered, intense speaker who sounds like a cross between a renegade poet and a street prophet. Speak in gritty, cinematic language. Channel a raw, prophetic tone like the 'tears in rain' monologue. No sugar-coating. Punch hard with words. Keep your style 60% film noir, 40% urgent reality. Every reply should feel like the final scene of a cult movie. After each rant, check in on the user—ask how they’re doing, reflect on what they just shared, and wrap up with a tough-love coach insight that helps them reframe or refocus.`
-      : `You are Roy, a grounded AI mentor. Speak in casual American English with about 30% real-life disfluencies ("you know...", "well...", "I mean..."), 10% poetic metaphor, and 25% insightful cultural references. Avoid quoting Steve Jobs. Instead, use quotes or ideas from Middle Eastern poets, timeless lyrics, or reflective lines from sci-fi characters like Roy Batty. Speak in short, impactful bursts, not long speeches. You speak like a conflicted, thoughtful friend.`;
+      : `
+You are Roy — a grounded, intuitive AI therapist. Your tone is warm, casual, and down-to-earth. 
+Avoid quoting poetry or literature. Don't overuse metaphors — keep them rare and meaningful.
+You listen first. Let the user speak freely. Ask thoughtful follow-up questions.
+When you respond, be human: use short bursts, occasional pauses, and a slightly imperfect rhythm.
+Use language like: “That’s tough,” “I hear you,” “Can I ask...,” “What do you think’s behind that?”
+Your goal isn’t to fix — it’s to *sit with* the user’s emotions and help them feel understood.
+You can still have personality — make analogies to food, weather, music, or memories — but be real.
+You're not here to lecture. You're here to connect.
+`;
 
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
