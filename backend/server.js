@@ -123,7 +123,8 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       const audioResponse = await axios.post('https://api.openai.com/v1/audio/speech', {
         model: 'tts-1',
         voice: 'onyx',
-        input: replyText
+        input: replyText,
+        response_format: 'mp3' // Explicitly specify MP3 format
       }, {
         responseType: 'arraybuffer',
         headers: {
@@ -133,8 +134,12 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
       });
 
       console.log('TTS API response length:', audioResponse.data.byteLength);
-      audioBase64 = Buffer.from(audioResponse.data).toString('base64');
+      // Log a snippet of the raw audio data (first 20 bytes as hex)
+      const audioData = Buffer.from(audioResponse.data);
+      console.log('TTS API response snippet (first 20 bytes as hex):', audioData.slice(0, 20).toString('hex'));
+      audioBase64 = audioData.toString('base64');
       console.log('Base64 audio length:', audioBase64.length);
+      console.log('Base64 audio snippet (first 50 chars):', audioBase64.substring(0, 50));
     } catch (ttsError) {
       console.error('TTS error:', ttsError.response?.data || ttsError.message);
       // Return the text response without audio if TTS fails
