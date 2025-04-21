@@ -124,7 +124,7 @@ app.post('/api/chat', upload.single('audio'), async (req, res) => {
         model: 'tts-1',
         voice: 'onyx',
         input: replyText,
-        response_format: 'mp3' // Explicitly specify MP3 format
+        response_format: 'mp3' // Reverted to MP3
       }, {
         responseType: 'arraybuffer',
         headers: {
