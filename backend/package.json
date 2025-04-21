@@ -1,7 +1,7 @@
 {
   "name": "roy-chatbot-backend",
   "version": "1.0.0",
-  "description": "Backend for Roy Chatbot using AssemblyAI, GPT-4, and TTS",
+  "description": "Backend for Roy Chatbot using Whisper, GPT-4, and TTS",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,8 +12,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.3",
     "form-data": "^4.0.0",
-    "multer": "^1.4.5-lts.1",
-    "assemblyai": "^4.6.1"
+    "multer": "^1.4.5-lts.1"
   },
   "engines": {
     "node": ">=16.0.0"
