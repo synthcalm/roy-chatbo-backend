@@ -13,14 +13,15 @@ const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3000;
 const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
-app.use(cors());
+app.use(cors({
+  origin: 'https://synthcalm.com'
+}));
 app.use(express.json());
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
   try {
-    // 1. Upload audio to AssemblyAI
     const audioData = fs.readFileSync(req.file.path);
     const uploadRes = await axios.post(
       'https://api.assemblyai.com/v2/upload',
@@ -35,7 +36,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const audioUrl = uploadRes.data.upload_url;
 
-    // 2. Start transcription
     const transcriptRes = await axios.post(
       'https://api.assemblyai.com/v2/transcript',
       { audio_url: audioUrl },
@@ -49,7 +49,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const transcriptId = transcriptRes.data.id;
 
-    // 3. Poll for result
     let completed = false;
     let text = '';
     while (!completed) {
