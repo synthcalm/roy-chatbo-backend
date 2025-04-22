@@ -1,4 +1,4 @@
-// server.js (no changes needed)
+// server.js
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -23,12 +23,14 @@ app.use(cors({
 
 app.use(express.json());
 
+// Transcription Route
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
   const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
 
   try {
+    // Convert audio to the required format (WAV)
     await new Promise((resolve, reject) => {
       ffmpeg(req.file.path)
         .audioCodec('pcm_s16le')
@@ -98,10 +100,37 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
+// Chat Route (NEW)
+app.post('/api/chat', async (req, res) => {
+  const { message, persona } = req.body;
+
+  // Placeholder logic for Roy and Randy responses
+  let responseText = '';
+  let responseAudio = ''; // Placeholder for audio
+
+  if (persona === 'roy') {
+    // Roy's response logic (replace with actual logic)
+    responseText = `Roy: Okay, here's my response to: "${message}"`;
+    responseAudio = ''; // Placeholder, generate Roy's TTS audio here
+  } else if (persona === 'randy') {
+    // Randy's response logic (replace with actual logic)
+    responseText = `Randy: You said: "${message}"`;
+    responseAudio = ''; // Placeholder, generate Randy's TTS audio here
+  }
+
+  // Send back the response text and audio (if available)
+  res.json({
+    text: responseText,
+    audio: responseAudio, // Provide the base64 audio or URL for playback
+  });
+});
+
+// Root route for checking the server status
 app.get('/', (req, res) => {
   res.send('Roy Chatbot Backend Running');
 });
 
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
