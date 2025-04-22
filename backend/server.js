@@ -29,7 +29,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       {
         headers: {
           'authorization': ASSEMBLY_API_KEY,
-          'content-type': 'application/octet-stream',
+          'content-type': 'audio/wav',
+          'transfer-encoding': 'chunked'
         }
       }
     );
