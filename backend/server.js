@@ -1,4 +1,4 @@
-// server.js
+// server.js (no changes needed)
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -17,7 +17,6 @@ const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3000;
 const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
-// ✅ Allow both synthcalm.com and synthcalm.github.io
 app.use(cors({
   origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
 }));
@@ -30,7 +29,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
 
   try {
-    // Convert uploaded audio to WAV PCM 16-bit mono 16kHz
     await new Promise((resolve, reject) => {
       ffmpeg(req.file.path)
         .audioCodec('pcm_s16le')
