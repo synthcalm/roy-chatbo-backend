@@ -28,12 +28,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
 
   try {
-    // Re-encode the uploaded file to WAV PCM 16-bit, mono, 16kHz
+    // Re-encode with volume boost and correct format
     await new Promise((resolve, reject) => {
       ffmpeg(req.file.path)
         .audioCodec('pcm_s16le')
         .audioChannels(1)
         .audioFrequency(16000)
+        .audioFilters('volume=5') // Boost volume by 5x
         .on('end', resolve)
         .on('error', reject)
         .save(convertedPath);
