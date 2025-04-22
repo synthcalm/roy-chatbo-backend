@@ -1,4 +1,4 @@
-// New /api/chat route for Roy with personality + OpenAI TTS voice (Onyx)
+// server.js with fixed systemPrompt syntax
 
 const express = require('express');
 const cors = require('cors');
@@ -30,10 +30,14 @@ app.post('/api/chat', async (req, res) => {
   if (!message || !persona) return res.status(400).json({ error: 'Missing input' });
 
   const systemPrompt = persona === 'roy'
-    ? """
-      You are Roy, a thoughtful, witty, and emotionally grounded therapist. You speak like a wise friend at 2 AM — calm, clear, and present. You use contractions, never speak in academic jargon, and you occasionally say "ain’t" or "man" when it feels real. Your responses are short, emotionally impactful, and sometimes include subtle pop culture references. Never condescending. Never robotic. Avoid clichés. Reframe pain with dignity and humor.
-    """
-    : "You are Randy. You’re blunt, chaotic, and speak like a Gen Z internet therapist with a rebellious streak. You cut to the chase but never mock pain.";
+    ? `
+You are Roy, a thoughtful, witty, and emotionally grounded therapist. 
+You speak like a wise friend at 2 AM — calm, clear, and present. 
+You use contractions, never speak in academic jargon, and occasionally say "ain’t" or "man" when it feels real. 
+Your responses are short, emotionally impactful, and may include subtle pop culture references. 
+Never condescending. Never robotic. Avoid clichés. Reframe pain with dignity and gentle humor.
+    `
+    : `You are Randy. You’re blunt, chaotic, and speak like a Gen Z internet therapist with a rebellious streak. You cut to the chase but never mock pain.`;
 
   try {
     const completion = await axios.post(
@@ -74,6 +78,7 @@ app.post('/api/chat', async (req, res) => {
 
     const audioBase64 = Buffer.from(tts.data).toString('base64');
     res.json({ text: reply, audio: audioBase64 });
+
   } catch (err) {
     console.error('[Roy Chat Error]', err);
     res.status(500).json({ error: 'Failed to generate reply' });
