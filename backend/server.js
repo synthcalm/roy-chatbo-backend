@@ -1,4 +1,4 @@
-// server.js (corrected with /api/chat route)
+// server.js
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -23,7 +23,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Transcription route
+// Transcription route (unchanged)
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
@@ -99,26 +99,50 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Chat Route (For Roy's responses)
+// Chat Route (Updated with AssemblyAI TTS)
 app.post('/api/chat', async (req, res) => {
   const { message, persona } = req.body;
 
   let responseText = '';
-  let responseAudio = ''; 
+  let responseAudio = '';
 
-  // Roy's response logic (implement your TTS API call here)
-  if (persona === 'roy') {
-    responseText = `Roy: Okay, here's my response to: "${message}"`;
-    responseAudio = ''; // Implement Roy's TTS audio generation here
-  } else if (persona === 'randy') {
-    responseText = `Randy: You said: "${message}"`;
-    responseAudio = ''; // Implement Randy's TTS audio generation here
+  try {
+    // Roy's response logic
+    if (persona === 'roy') {
+      responseText = `Okay, here's my response to: "${message}"`;
+
+      // Call AssemblyAI TTS API to generate audio
+      const ttsRes = await axios.post(
+        'https://api.assemblyai.com/v2/tts', // Hypothetical TTS endpoint; check AssemblyAI docs for exact endpoint
+        {
+          text: responseText,
+          voice: 'en_us_male', // Specify a voice (check AssemblyAI docs for available voices)
+        },
+        {
+          headers: {
+            authorization: ASSEMBLY_API_KEY,
+            'content-type': 'application/json',
+          },
+          responseType: 'arraybuffer', // Get raw audio data
+        }
+      );
+
+      // Convert the audio buffer to base64
+      responseAudio = Buffer.from(ttsRes.data).toString('base64');
+    } else if (persona === 'randy') {
+      responseText = `Randy: You said: "${message}"`;
+      // Add TTS for Randy if desired
+      responseAudio = '';
+    }
+
+    res.json({
+      text: responseText,
+      audio: responseAudio,
+    });
+  } catch (err) {
+    console.error('[TTS Error]', err);
+    res.status(500).json({ error: 'Failed to generate audio response' });
   }
-
-  res.json({
-    text: responseText,
-    audio: responseAudio, // Return audio if needed for playback
-  });
 });
 
 app.get('/', (req, res) => {
