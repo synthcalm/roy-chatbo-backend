@@ -31,8 +31,9 @@ app.use(cors({
   origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
 }));
 app.use(express.json());
+app.use(express.static('public')); // Serve favicon.ico
 
-// Transcription route (unused in current frontend)
+// Transcription route
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
