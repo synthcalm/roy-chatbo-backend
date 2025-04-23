@@ -8,8 +8,18 @@ const FormData = require('form-data');
 const ffmpeg = require('fluent-ffmpeg');
 require('dotenv').config();
 
-// Set FFmpeg path to Render's system FFmpeg
-ffmpeg.setFmpegPath('/usr/bin/ffmpeg');
+// Set FFmpeg path to Render's system FFmpeg with error handling
+try {
+  const ffmpegPath = '/usr/bin/ffmpeg';
+  if (fs.existsSync(ffmpegPath)) {
+    ffmpeg.setFfmpegPath(ffmpegPath); // Corrected method name to setFfmpegPath
+    console.log(`FFmpeg path set to: ${ffmpegPath}`);
+  } else {
+    console.error(`FFmpeg not found at ${ffmpegPath}. Please ensure FFmpeg is installed.`);
+  }
+} catch (err) {
+  console.error(`Error setting FFmpeg path: ${err.message}`);
+}
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -91,6 +101,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     res.json({ text });
 
   } catch (err) {
+    console.error(`Transcription error: ${err.message}`);
     res.status(500).json({ error: 'Failed to transcribe audio' });
   } finally {
     fs.unlink(req.file.path, () => {});
@@ -124,8 +135,8 @@ app.post('/api/chat', async (req, res) => {
         {
           model: 'tts-1',
           input: responseText,
-          voice: 'onyx', // Using onyx as specified
-          speed: 0.9, // Slightly slower for Roy's relaxed vibe
+          voice: 'onyx',
+          speed: 0.9,
         },
         {
           headers: {
@@ -161,6 +172,7 @@ app.post('/api/chat', async (req, res) => {
       audio: responseAudio,
     });
   } catch (err) {
+    console.error(`Chat route error: ${err.message}`);
     res.status(500).json({ error: 'Failed to generate audio response' });
   }
 });
