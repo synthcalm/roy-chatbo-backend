@@ -1,7 +1,7 @@
 {
-  "name": "roy-chatbo-backend",
+  "name": "roy-chatbot-backend",
   "version": "1.0.0",
-  "description": "Backend for Roy Chatbot",
+  "description": "Backend for Roy Chatbot with GPT-3.5 Turbo and Onyx TTS",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
