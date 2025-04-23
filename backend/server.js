@@ -252,6 +252,11 @@ function stopRecording() {
   analyser?.disconnect();
   userAudioContext?.close();
   recognition?.stop();
+
+  // ✅ Wait for speech recognition to finish processing before sending
+  setTimeout(() => {
+    sendToRoy();
+  }, 500);
 }
 
 window.onload = function () {
