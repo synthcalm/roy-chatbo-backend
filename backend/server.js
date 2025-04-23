@@ -6,10 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config();
 
-ffmpeg.setFffmpegPath(ffmpegPath);
+// Set FFmpeg path to Render's system FFmpeg
+ffmpeg.setFmpegPath('/usr/bin/ffmpeg');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
