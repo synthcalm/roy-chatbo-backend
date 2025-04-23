@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -10,7 +9,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config();
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFffmpegPath(ffmpegPath);
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -99,7 +98,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Chat route with OpenAI TTS
+// Chat route with Roy's new persona and voice style
 app.post('/api/chat', async (req, res) => {
   const { message, persona } = req.body;
   let responseText = '';
@@ -107,13 +106,26 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     if (persona === 'roy') {
-      responseText = `Okay, here's my response to: "${message}"`;
+      // Roy's new therapeutic, casual responses with linguistic markers
+      if (message.toLowerCase().includes('testing') || message.toLowerCase().includes('check')) {
+        responseText = "Hey, so… like… I hear you testing things out, yeah? (0.3s pause) Sounds like you’re making sure it all works — maybe feeling a bit unsure? (0.5s pause) What’s going on, man?";
+      } else if (message.toLowerCase().includes('who are you') || message.toLowerCase().includes('purpose')) {
+        responseText = "So… I’m Roy, you know? (0.3s pause) Kinda like your chill older brother, here to listen and help you figure stuff out. (0.5s pause) What’s on your mind, though?";
+      } else if (message.toLowerCase().includes('therapist') || message.toLowerCase().includes('what happened')) {
+        responseText = "Yeah… I’m here to support you, man, like a friend who listens, you know? (0.3s pause) Sounds like you’re wondering about my role — maybe something feels off? (0.5s pause) Wanna talk about that a bit more?";
+      } else if (message.toLowerCase().includes('stuck')) {
+        responseText = "Ohh, yeah… I hear that. (0.3s pause) It’s like… you’re standing at this giant wall, and it’s not clear if there’s even a door in it, right? (0.5s pause) Umm… where do you think that stuckness is coming from? No rush — we can just sit with it.";
+      } else {
+        responseText = "Ahh, yeah… I hear you saying, '" + message + ".' (0.3s pause) That makes me wonder how you’re feeling right now, you know? (0.5s pause) Wanna unpack that a bit more? Totally okay if not.";
+      }
+
       const ttsRes = await axios.post(
         'https://api.openai.com/v1/audio/speech',
         {
           model: 'tts-1',
           input: responseText,
-          voice: 'alloy',
+          voice: 'onyx', // Using onyx as specified
+          speed: 0.9, // Slightly slower for Roy's relaxed vibe
         },
         {
           headers: {
@@ -125,7 +137,7 @@ app.post('/api/chat', async (req, res) => {
       );
       responseAudio = Buffer.from(ttsRes.data).toString('base64');
     } else if (persona === 'randy') {
-      responseText = `Randy: You said: "${message}"`;
+      responseText = `Randy: I hear you saying, "${message}". Tell me more—let it all out!`;
       const ttsRes = await axios.post(
         'https://api.openai.com/v1/audio/speech',
         {
