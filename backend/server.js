@@ -1,3 +1,4 @@
+// === server.js ===
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -8,37 +9,19 @@ const FormData = require('form-data');
 const ffmpeg = require('fluent-ffmpeg');
 require('dotenv').config();
 
-// Set FFmpeg path
-try {
-  const ffmpegPath = '/usr/bin/ffmpeg';
-  if (fs.existsSync(ffmpegPath)) {
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    console.log(`FFmpeg path set to: ${ffmpegPath}`);
-  } else {
-    console.error(`FFmpeg not found at ${ffmpegPath}`);
-  }
-} catch (err) {
-  console.error(`Error setting FFmpeg path: ${err.message}`);
-}
-
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3000;
 const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-app.use(cors({
-  origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
-}));
+app.use(cors({ origin: ['https://synthcalm.com', 'https://synthcalm.github.io'] }));
 app.use(express.json());
-app.use(express.static('public')); // Serve favicon.ico
+app.use(express.static('public'));
 
-// Transcription route
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
-
   const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
-
   try {
     await new Promise((resolve, reject) => {
       ffmpeg(req.file.path)
@@ -49,43 +32,20 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
         .on('error', reject)
         .save(convertedPath);
     });
-
     const audioData = fs.readFileSync(convertedPath);
-    const uploadRes = await axios.post(
-      'https://api.assemblyai.com/v2/upload',
-      audioData,
-      {
-        headers: {
-          'authorization': ASSEMBLY_API_KEY,
-          'content-type': 'audio/wav',
-          'transfer-encoding': 'chunked'
-        }
-      }
-    );
-
+    const uploadRes = await axios.post('https://api.assemblyai.com/v2/upload', audioData, {
+      headers: { 'authorization': ASSEMBLY_API_KEY, 'content-type': 'audio/wav', 'transfer-encoding': 'chunked' },
+    });
     const audioUrl = uploadRes.data.upload_url;
-    const transcriptRes = await axios.post(
-      'https://api.assemblyai.com/v2/transcript',
-      { audio_url: audioUrl },
-      {
-        headers: {
-          authorization: ASSEMBLY_API_KEY,
-          'content-type': 'application/json',
-        }
-      }
-    );
-
+    const transcriptRes = await axios.post('https://api.assemblyai.com/v2/transcript', { audio_url: audioUrl }, {
+      headers: { authorization: ASSEMBLY_API_KEY, 'content-type': 'application/json' },
+    });
     const transcriptId = transcriptRes.data.id;
-    let completed = false;
-    let text = '';
+    let completed = false, text = '';
     while (!completed) {
-      const pollingRes = await axios.get(
-        `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
-        {
-          headers: { authorization: ASSEMBLY_API_KEY }
-        }
-      );
-
+      const pollingRes = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: { authorization: ASSEMBLY_API_KEY },
+      });
       if (pollingRes.data.status === 'completed') {
         completed = true;
         text = pollingRes.data.text;
@@ -95,7 +55,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
         await new Promise(r => setTimeout(r, 1500));
       }
     }
-
     res.json({ text });
   } catch (err) {
     console.error(`Transcription error: ${err.message}`);
@@ -106,75 +65,36 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Chat route
 app.post('/api/chat', async (req, res) => {
   const { message, persona } = req.body;
-  let responseText = '';
-  let responseAudio = '';
-
   try {
-    if (persona === 'roy') {
-      if (message.toLowerCase().includes('testing') || message.toLowerCase().includes('check')) {
-        responseText = "Hey, so… like… I hear you testing things out, yeah? (0.3s pause) Sounds like you’re making sure it all works — maybe feeling a bit unsure? (0.5s pause) What’s going on, man?";
-      } else if (message.toLowerCase().includes('who are you') || message.toLowerCase().includes('purpose')) {
-        responseText = "So… I’m Roy, you know? (0.3s pause) Kinda like your chill older brother, here to listen and help you figure stuff out. (0.5s pause) What’s on your mind, though?";
-      } else if (message.toLowerCase().includes('therapist') || message.toLowerCase().includes('what happened')) {
-        responseText = "Yeah… I’m here to support you, man, like a friend who listens, you know? (0.3s pause) Sounds like you’re wondering about my role — maybe something feels off? (0.5s pause) Wanna talk about that a bit more?";
-      } else if (message.toLowerCase().includes('stuck')) {
-        responseText = "Ohh, yeah… I hear that. (0.3s pause) It’s like… you’re standing at this giant wall, and it’s not clear if there’s even a door in it, right? (0.5s pause) Umm… where do you think that stuckness is coming from? No rush — we can just sit with it.";
-      } else {
-        responseText = "Ahh, yeah… I hear you saying, '" + message + ".' (0.3s pause) That makes me wonder how you’re feeling right now, you know? (0.5s pause) Wanna unpack that a bit more? Totally okay if not.";
-      }
-
-      const ttsRes = await axios.post(
-        'https://api.openai.com/v1/audio/speech',
-        {
-          model: 'tts-1',
-          input: responseText,
-          voice: 'onyx',
-          speed: 0.9,
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          responseType: 'arraybuffer',
-        }
-      );
-      responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
-    } else if (persona === 'randy') {
-      responseText = `Randy: I hear you saying, "${message}". Tell me more—let it all out!`;
-      const ttsRes = await axios.post(
-        'https://api.openai.com/v1/audio/speech',
-        {
-          model: 'tts-1',
-          input: responseText,
-          voice: 'echo',
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          responseType: 'arraybuffer',
-        }
-      );
-      responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
-    }
-
-    res.json({
-      text: responseText,
-      audio: responseAudio,
+    const chatRes = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: 'You are Roy, a laid-back but emotionally intelligent chatbot therapist. You listen deeply and speak with a casual, supportive tone. Avoid cutting people off. Use phrases like "you know," "man," "uhh," "yeah…"' },
+        { role: 'user', content: message },
+      ],
+    }, {
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
     });
+
+    const responseText = chatRes.data.choices[0].message.content;
+    const ttsRes = await axios.post('https://api.openai.com/v1/audio/speech', {
+      model: 'tts-1',
+      input: responseText,
+      voice: 'onyx',
+      speed: 0.9,
+    }, {
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      responseType: 'arraybuffer',
+    });
+
+    const responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
+    res.json({ text: responseText, audio: responseAudio });
   } catch (err) {
     console.error(`Chat route error: ${err.message}`);
     res.status(500).json({ error: 'Failed to generate audio response' });
   }
-});
-
-app.get('/', (req, res) => {
-  res.send('Roy Chatbot Backend Running');
 });
 
 app.listen(PORT, () => {
