@@ -8,14 +8,14 @@ const FormData = require('form-data');
 const ffmpeg = require('fluent-ffmpeg');
 require('dotenv').config();
 
-// Set FFmpeg path to Render's system FFmpeg with error handling
+// Set FFmpeg path
 try {
   const ffmpegPath = '/usr/bin/ffmpeg';
   if (fs.existsSync(ffmpegPath)) {
-    ffmpeg.setFfmpegPath(ffmpegPath); // Corrected method name to setFfmpegPath
+    ffmpeg.setFfmpegPath(ffmpegPath);
     console.log(`FFmpeg path set to: ${ffmpegPath}`);
   } else {
-    console.error(`FFmpeg not found at ${ffmpegPath}. Please ensure FFmpeg is installed.`);
+    console.error(`FFmpeg not found at ${ffmpegPath}`);
   }
 } catch (err) {
   console.error(`Error setting FFmpeg path: ${err.message}`);
@@ -30,10 +30,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 app.use(cors({
   origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
 }));
-
 app.use(express.json());
 
-// Transcription route
+// Transcription route (unused in current frontend)
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
@@ -64,7 +63,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     );
 
     const audioUrl = uploadRes.data.upload_url;
-
     const transcriptRes = await axios.post(
       'https://api.assemblyai.com/v2/transcript',
       { audio_url: audioUrl },
@@ -77,7 +75,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     );
 
     const transcriptId = transcriptRes.data.id;
-
     let completed = false;
     let text = '';
     while (!completed) {
@@ -99,7 +96,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     }
 
     res.json({ text });
-
   } catch (err) {
     console.error(`Transcription error: ${err.message}`);
     res.status(500).json({ error: 'Failed to transcribe audio' });
@@ -109,7 +105,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Chat route with Roy's new persona and voice style
+// Chat route
 app.post('/api/chat', async (req, res) => {
   const { message, persona } = req.body;
   let responseText = '';
@@ -117,7 +113,6 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     if (persona === 'roy') {
-      // Roy's new therapeutic, casual responses with linguistic markers
       if (message.toLowerCase().includes('testing') || message.toLowerCase().includes('check')) {
         responseText = "Hey, so… like… I hear you testing things out, yeah? (0.3s pause) Sounds like you’re making sure it all works — maybe feeling a bit unsure? (0.5s pause) What’s going on, man?";
       } else if (message.toLowerCase().includes('who are you') || message.toLowerCase().includes('purpose')) {
@@ -146,7 +141,7 @@ app.post('/api/chat', async (req, res) => {
           responseType: 'arraybuffer',
         }
       );
-      responseAudio = Buffer.from(ttsRes.data).toString('base64');
+      responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
     } else if (persona === 'randy') {
       responseText = `Randy: I hear you saying, "${message}". Tell me more—let it all out!`;
       const ttsRes = await axios.post(
@@ -164,7 +159,7 @@ app.post('/api/chat', async (req, res) => {
           responseType: 'arraybuffer',
         }
       );
-      responseAudio = Buffer.from(ttsRes.data).toString('base64');
+      responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
     }
 
     res.json({
