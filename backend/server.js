@@ -16,6 +16,7 @@ const app = express();
 const upload = multer({ dest: 'uploads/' });
 const PORT = process.env.PORT || 3000;
 const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 app.use(cors({
   origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
@@ -23,7 +24,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Transcription route (unchanged)
+// Transcription route
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
 
@@ -91,7 +92,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     res.json({ text });
 
   } catch (err) {
-    console.error('[Transcription Error]', err);
     res.status(500).json({ error: 'Failed to transcribe audio' });
   } finally {
     fs.unlink(req.file.path, () => {});
@@ -99,40 +99,49 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Chat Route (Updated with AssemblyAI TTS)
+// Chat route with OpenAI TTS
 app.post('/api/chat', async (req, res) => {
   const { message, persona } = req.body;
-
   let responseText = '';
   let responseAudio = '';
 
   try {
-    // Roy's response logic
     if (persona === 'roy') {
       responseText = `Okay, here's my response to: "${message}"`;
-
-      // Call AssemblyAI TTS API to generate audio
       const ttsRes = await axios.post(
-        'https://api.assemblyai.com/v2/tts', // Hypothetical TTS endpoint; check AssemblyAI docs for exact endpoint
+        'https://api.openai.com/v1/audio/speech',
         {
-          text: responseText,
-          voice: 'en_us_male', // Specify a voice (check AssemblyAI docs for available voices)
+          model: 'tts-1',
+          input: responseText,
+          voice: 'alloy',
         },
         {
           headers: {
-            authorization: ASSEMBLY_API_KEY,
-            'content-type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
           },
-          responseType: 'arraybuffer', // Get raw audio data
+          responseType: 'arraybuffer',
         }
       );
-
-      // Convert the audio buffer to base64
       responseAudio = Buffer.from(ttsRes.data).toString('base64');
     } else if (persona === 'randy') {
       responseText = `Randy: You said: "${message}"`;
-      // Add TTS for Randy if desired
-      responseAudio = '';
+      const ttsRes = await axios.post(
+        'https://api.openai.com/v1/audio/speech',
+        {
+          model: 'tts-1',
+          input: responseText,
+          voice: 'echo',
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          responseType: 'arraybuffer',
+        }
+      );
+      responseAudio = Buffer.from(ttsRes.data).toString('base64');
     }
 
     res.json({
@@ -140,7 +149,6 @@ app.post('/api/chat', async (req, res) => {
       audio: responseAudio,
     });
   } catch (err) {
-    console.error('[TTS Error]', err);
     res.status(500).json({ error: 'Failed to generate audio response' });
   }
 });
