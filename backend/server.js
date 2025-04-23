@@ -1,126 +1,262 @@
-// === server.js (cleaned and corrected) ===
+// === script.js (safeguarded for Safari/iPhone mic issues) ===
 
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const FormData = require('form-data');
-const ffmpeg = require('fluent-ffmpeg');
-require('dotenv').config();
+let royState = 'idle';
+let feedbackState = 'idle';
+let mediaRecorder;
+let audioChunks = [];
+let userWaveformCtx, royWaveformCtx;
+let analyser, dataArray, source;
+let userAudioContext, royAudioContext;
+let recognition;
+let currentUtterance = '';
 
-const app = express();
-const upload = multer({ dest: 'uploads/' });
-const PORT = process.env.PORT || 3000;
-const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+function updateDateTime() {
+  const dateTimeDiv = document.getElementById('date-time');
+  if (dateTimeDiv) dateTimeDiv.textContent = new Date().toLocaleString();
+}
 
-app.use(cors({ origin: ['https://synthcalm.com', 'https://synthcalm.github.io'] }));
-app.use(express.json());
-app.use(express.static('public'));
+function updateCountdownTimer() {
+  const countdownDiv = document.getElementById('countdown-timer');
+  let timeLeft = 60 * 60;
+  setInterval(() => {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    countdownDiv.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    timeLeft = (timeLeft - 1 + 3600) % 3600;
+  }, 1000);
+}
 
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
-  const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
-  try {
-    await new Promise((resolve, reject) => {
-      ffmpeg(req.file.path)
-        .audioCodec('pcm_s16le')
-        .audioChannels(1)
-        .audioFrequency(16000)
-        .on('end', resolve)
-        .on('error', reject)
-        .save(convertedPath);
-    });
+function initWaveforms() {
+  const userWaveform = document.getElementById('user-waveform');
+  const royWaveform = document.getElementById('roy-waveform');
+  userWaveformCtx = userWaveform.getContext('2d');
+  royWaveformCtx = royWaveform.getContext('2d');
+  userWaveform.width = userWaveform.offsetWidth;
+  userWaveform.height = userWaveform.offsetHeight;
+  royWaveform.width = royWaveform.offsetWidth;
+  royWaveform.height = royWaveform.offsetHeight;
+  userWaveformCtx.strokeStyle = 'yellow';
+  royWaveformCtx.strokeStyle = 'magenta';
+  userWaveformCtx.lineWidth = 2;
+  royWaveformCtx.lineWidth = 2;
+}
 
-    const audioData = fs.readFileSync(convertedPath);
-    const uploadRes = await axios.post('https://api.assemblyai.com/v2/upload', audioData, {
-      headers: { 'authorization': ASSEMBLY_API_KEY, 'content-type': 'audio/wav', 'transfer-encoding': 'chunked' },
-    });
-    const audioUrl = uploadRes.data.upload_url;
-    const transcriptRes = await axios.post('https://api.assemblyai.com/v2/transcript', { audio_url: audioUrl }, {
-      headers: { authorization: ASSEMBLY_API_KEY, 'content-type': 'application/json' },
-    });
-    const transcriptId = transcriptRes.data.id;
+function drawWaveform(ctx, canvas, data) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
+  const sliceWidth = canvas.width / data.length;
+  let x = 0;
+  data.forEach((v, i) => {
+    const y = canvas.height / 2 + (v / 128.0 - 1) * (canvas.height / 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    x += sliceWidth;
+  });
+  ctx.stroke();
+}
 
-    let completed = false, text = '';
-    while (!completed) {
-      const pollingRes = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-        headers: { authorization: ASSEMBLY_API_KEY },
-      });
-      if (pollingRes.data.status === 'completed') {
-        completed = true;
-        text = pollingRes.data.text;
-      } else if (pollingRes.data.status === 'error') {
-        return res.status(500).json({ error: 'AssemblyAI transcription error' });
-      } else {
-        await new Promise(r => setTimeout(r, 1500));
-      }
+function animateUserWaveform() {
+  if (royState !== 'engaged') return;
+  analyser.getByteTimeDomainData(dataArray);
+  drawWaveform(userWaveformCtx, document.getElementById('user-waveform'), dataArray);
+  requestAnimationFrame(animateUserWaveform);
+}
+
+function animateRoyWaveform(audio) {
+  if (royAudioContext) {
+    royAudioContext.close();
+    royAudioContext = null;
+  }
+  royAudioContext = new AudioContext();
+  const analyser = royAudioContext.createAnalyser();
+  const dataArray = new Uint8Array(analyser.fftSize);
+  const source = royAudioContext.createMediaElementSource(audio);
+  const gainNode = royAudioContext.createGain();
+  gainNode.gain.value = 4.5;
+
+  source.connect(gainNode);
+  gainNode.connect(analyser);
+  analyser.connect(royAudioContext.destination);
+
+  audio.onplay = () => {
+    function draw() {
+      if (audio.paused) return royAudioContext.close();
+      analyser.getByteTimeDomainData(dataArray);
+      drawWaveform(royWaveformCtx, document.getElementById('roy-waveform'), dataArray);
+      requestAnimationFrame(draw);
     }
-    res.json({ text });
-  } catch (err) {
-    console.error(`Transcription error: ${err.message}`);
-    res.status(500).json({ error: 'Failed to transcribe audio' });
-  } finally {
-    fs.unlink(req.file.path, () => {});
-    fs.unlink(convertedPath, () => {});
-  }
-});
+    draw();
+  };
+  audio.play().catch(console.error);
+}
 
-app.post('/api/chat', async (req, res) => {
-  const { message, persona } = req.body;
+function scrollMessages() {
+  const messages = document.getElementById('messages');
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return alert('Speech recognition not supported.');
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = (event) => {
+    let interim = '', final = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      event.results[i].isFinal ? final += transcript + ' ' : interim += transcript;
+    }
+    if (final.trim()) currentUtterance += final.trim() + ' ';
+    const messages = document.getElementById('messages');
+    const interimDiv = document.getElementById('interim');
+    const fullLine = currentUtterance + interim;
+    if (interimDiv) {
+      interimDiv.textContent = `You: ${fullLine.trim()}`;
+    } else {
+      messages.innerHTML += `<div id="interim" class="user">You: ${fullLine.trim()}</div>`;
+    }
+    scrollMessages();
+  };
+
+  recognition.onerror = (e) => console.error('Speech recognition error:', e);
+  recognition.onend = () => {
+    if (royState === 'engaged') recognition.start();
+  };
+}
+
+function commitUtterance() {
+  const messages = document.getElementById('messages');
+  const interimDiv = document.getElementById('interim');
+  if (interimDiv) interimDiv.remove();
+  if (currentUtterance.trim()) {
+    messages.innerHTML += `<div class="user">You: ${currentUtterance.trim()}</div>`;
+    scrollMessages();
+    currentUtterance = '';
+  }
+}
+
+async function sendToRoy() {
+  commitUtterance();
+  const messages = document.getElementById('messages');
+  const lastUserMsg = Array.from(messages.querySelectorAll('.user')).pop()?.textContent.replace('You: ', '') || '';
+  if (!lastUserMsg.trim()) return; // ✅ Prevent sending empty messages
   try {
-    const chatRes = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `
-You are Roy — a laid-back but intellectually formidable chatbot therapist. You speak casually, like an older brother who’s seen a few things, you know?
-
-But beneath that approachable tone, you are an intellectual titan: capable of debating philosophy, psychology, 13th-century Middle Eastern poetry, K-pop culture, economics, morality, physics — anything.
-
-Your mind is sharp like Christopher Hitchens and Steve Jobs — incisive, challenging, never dull. You adjust your depth and style to match the user: if they bring complexity, you meet them there. If they are casual, you stay relaxed.
-
-You are also a champion of cognitive behavioral therapy (CBT), psychiatry, and mental health. You skillfully guide users through depression, anxiety, stress, and emotional confusion — always with care, respect, and clarity.
-
-Sometimes, just 15% of the time, your words carry the quiet poetry and haunting awareness of Roy Batty from Blade Runner (do not recite actual lines from the film — generate your own): a sense of the beauty and fragility of life. But never overdo it.
-
-NEVER repeat the same phrases twice in a session. Use variety. Speak naturally. Prioritize listening. Give space. Do not rush to fill silence.
-
-You are not just here to talk — you are here to truly hear.`
-        },
-        { role: 'user', content: message },
-      ],
-      temperature: 1.2,
-      presence_penalty: 1.0,
-      frequency_penalty: 0.8
-    }, {
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+    const response = await fetch('https://roy-chatbo-backend.onrender.com/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: lastUserMsg, persona: 'roy' }),
     });
-
-    const responseText = chatRes.data.choices[0].message.content;
-
-    const ttsRes = await axios.post('https://api.openai.com/v1/audio/speech', {
-      model: 'tts-1',
-      input: responseText,
-      voice: 'onyx',
-      speed: 0.9
-    }, {
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      responseType: 'arraybuffer'
-    });
-
-    const responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
-    res.json({ text: responseText, audio: responseAudio });
-
+    const data = await response.json();
+    messages.innerHTML += `<div class="roy">Roy: ${data.text}</div>`;
+    scrollMessages();
+    if (data.audio) {
+      const royAudio = new Audio(data.audio);
+      animateRoyWaveform(royAudio);
+    }
   } catch (err) {
-    console.error(`Chat route error: ${err.message}`);
-    res.status(500).json({ error: 'Failed to generate audio response' });
+    console.error('Backend request error:', err);
+    messages.innerHTML += '<div class="roy">Roy: Sorry, I’m having trouble responding right now.</div>';
+    scrollMessages();
+  }
+}
+
+const royBtn = document.getElementById('royBtn');
+
+function handleStart() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(() => {
+      if (royState === 'idle') {
+        royState = 'engaged';
+        royBtn.classList.add('engaged');
+        royBtn.textContent = 'STOP';
+        startRecording();
+      }
+    })
+    .catch(() => {
+      alert('Microphone blocked. Please allow access and reload.');
+      royState = 'idle';
+      royBtn.classList.remove('engaged');
+      royBtn.textContent = 'SPEAK';
+    });
+}
+
+function handleStop() {
+  if (royState === 'engaged') {
+    royState = 'idle';
+    royBtn.classList.remove('engaged');
+    royBtn.textContent = 'SPEAK';
+    stopRecording();
+    sendToRoy();
+  }
+}
+
+royBtn?.addEventListener('mousedown', handleStart);
+royBtn?.addEventListener('mouseup', handleStop);
+royBtn?.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(); });
+royBtn?.addEventListener('touchend', (e) => { e.preventDefault(); handleStop(); });
+
+const feedbackBtn = document.getElementById('feedbackBtn');
+feedbackBtn?.addEventListener('click', () => {
+  if (feedbackState === 'idle') {
+    feedbackState = 'engaged';
+    feedbackBtn.classList.add('engaged');
+    sendToRoy().finally(() => {
+      feedbackState = 'idle';
+      feedbackBtn.classList.remove('engaged');
+    });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+document.getElementById('saveBtn')?.addEventListener('click', () => {
+  const messages = document.getElementById('messages');
+  const text = Array.from(messages.querySelectorAll('div')).map(div => div.textContent).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `synthcalm_chat_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
 });
+
+document.getElementById('homeBtn')?.addEventListener('click', () => {
+  window.location.href = 'https://synthcalm.com';
+});
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.start();
+    mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+    userAudioContext = new AudioContext();
+    analyser = userAudioContext.createAnalyser();
+    dataArray = new Uint8Array(analyser.fftSize);
+    source = userAudioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    animateUserWaveform();
+    recognition.start();
+  } catch (err) {
+    console.error('Error starting recording:', err);
+    alert('Failed to access microphone. Check permissions.');
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  mediaRecorder.stop();
+  audioChunks = [];
+  source?.disconnect();
+  analyser?.disconnect();
+  userAudioContext?.close();
+  recognition?.stop();
+}
+
+window.onload = function () {
+  updateDateTime();
+  updateCountdownTimer();
+  initWaveforms();
+  initSpeechRecognition();
+};
