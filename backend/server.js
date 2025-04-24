@@ -69,7 +69,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
 
-  // ✅ Input validation to prevent 500 error
+  // ✅ Input validation
   if (!message || typeof message !== 'string' || !message.trim()) {
     console.error('Invalid input received:', message);
     return res.status(400).json({ error: 'Invalid message input' });
@@ -95,6 +95,12 @@ You speak casually, like an older brother who’s seen a few things, you know?
     }, {
       headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
     });
+
+    // ✅ Safety check for empty choices
+    if (!chatRes.data.choices || !chatRes.data.choices[0]?.message?.content) {
+      console.error('OpenAI returned no choices:', chatRes.data);
+      return res.status(500).json({ error: 'No response from OpenAI.' });
+    }
 
     const responseText = chatRes.data.choices[0].message.content;
 
