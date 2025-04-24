@@ -187,8 +187,7 @@ function handleStop() {
     royState = 'idle';
     royBtn.classList.remove('engaged');
     royBtn.textContent = 'SPEAK';
-    stopRecording();
-    sendToRoy();
+    stopRecording(); // sendToRoy() is already called inside stopRecording after recognition finishes
   }
 }
 
