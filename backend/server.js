@@ -140,7 +140,13 @@ function commitUtterance() {
 async function sendToRoy() {
   commitUtterance();
   const messages = document.getElementById('messages');
-  const lastUserMsg = Array.from(messages.querySelectorAll('.user')).pop()?.textContent.replace('You: ', '') || '';
+  const lastUserDiv = Array.from(messages.querySelectorAll('.user')).pop();
+  const lastUserMsg = lastUserDiv ? lastUserDiv.textContent.replace(/^You: /, '').trim() : '';
+
+  if (!lastUserMsg) {
+    console.warn('No valid message found to send.');
+    return;
+  }
   if (!lastUserMsg.trim()) return; // ✅ Prevent sending empty messages
   try {
     const response = await fetch('https://roy-chatbo-backend.onrender.com/api/chat', {
