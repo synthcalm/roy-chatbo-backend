@@ -90,6 +90,12 @@ function appendRoyMessage(message) {
 }
 
 function sendToRoy(transcript) {
+  if (!transcript || transcript.trim() === '') {
+    console.warn('Transcript is empty, not sending to backend.');
+    appendRoyMessage("Hmm... didn't catch that. Try saying something?");
+    return;
+  }
+
   appendUserMessage(transcript);
   document.getElementById('thinking-indicator').style.display = 'block';
 
@@ -176,6 +182,8 @@ function stopUserRecording() {
   speakBtn.innerText = 'SPEAK';
   if (currentTranscript.trim() !== '') {
     sendToRoy(currentTranscript);
+  } else {
+    appendRoyMessage("Hmm... didn't catch that. Try saying something?");
   }
   currentTranscript = '';
 }
