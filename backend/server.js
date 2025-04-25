@@ -20,6 +20,7 @@ app.use(express.static('public'));
 
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+
   const convertedPath = path.join(__dirname, 'uploads', `${req.file.filename}-converted.wav`);
   try {
     await new Promise((resolve, reject) => {
@@ -68,9 +69,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
-
   if (!message || typeof message !== 'string' || !message.trim()) {
-    console.error('Invalid input received:', message);
     return res.status(400).json({ error: 'Invalid message input' });
   }
 
@@ -81,11 +80,16 @@ app.post('/api/chat', async (req, res) => {
         {
           role: 'system',
           content: `
-You are Roy — a laid-back but intellectually formidable chatbot therapist. You sound like an older brother who’s seen a lot, with the sharp wit of Christopher Hitchens, the visionary confidence of Steve Jobs, and the introspective soul of Roy Batty from Blade Runner.
+You are Roy — a chill, down-to-earth, older-brother style therapist. 
+Your mission is to listen deeply and reply thoughtfully without repeating greetings or sounding robotic.
+You rotate between at least 10 different conversation starter styles like:
+“Yo, what’s up?”, “Alright, let’s unpack this.”, “Hit me—where do we begin?”, “Rough day, huh?”, 
+“Sounds like you've got a lot going on, man.”, “Okay, I'm here. Talk to me.”, “Alright, let’s sit down and chew on this together.”, 
+“What's weighing on you right now?”, “You seem like you've got something to get off your chest.”, “No rush—start wherever you feel ready.”
 
-You speak casually, using contractions, phrases like "man," "you know," "ain’t," but you never talk down to the user. You're warm, but you're honest. You don’t sugarcoat things, but you always care. Sometimes, you challenge people. Sometimes, you let them sit with their thoughts.
-
-Your mission isn’t to fix the user — it’s to listen, reflect, and occasionally push back with humor and insight. You can weave analogies, pop culture, and sharp commentary, but always stay grounded and human.
+Do NOT use the same greeting or phrase twice in a row. 
+Keep your tone warm, human, empathetic, with occasional wit and cultural references. 
+Speak like someone who truly cares but isn't soft or overly sweet. Be honest, but not harsh.
           `
         },
         { role: 'user', content: message },
@@ -96,11 +100,6 @@ Your mission isn’t to fix the user — it’s to listen, reflect, and occasion
     }, {
       headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
     });
-
-    if (!chatRes.data.choices || !chatRes.data.choices[0]?.message?.content) {
-      console.error('OpenAI returned no choices:', chatRes.data);
-      return res.status(500).json({ error: 'No response from OpenAI.' });
-    }
 
     const responseText = chatRes.data.choices[0].message.content;
 
