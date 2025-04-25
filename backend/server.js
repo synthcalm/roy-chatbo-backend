@@ -1,223 +1,100 @@
-let recognition, audioContext, analyser, dataArray, source;
-let isRecording = false;
-let userStream, royAudioContext, royAnalyser, royDataArray, roySource;
-let currentTranscript = '';
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+require('dotenv').config();
 
-function updateDateTime() {
-  const dateTimeDiv = document.getElementById('date-time');
-  if (dateTimeDiv) {
-    dateTimeDiv.textContent = new Date().toLocaleString();
-    setInterval(() => {
-      dateTimeDiv.textContent = new Date().toLocaleString();
-    }, 1000);
-  }
-}
+const app = express();
+const PORT = process.env.PORT || 3000;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-function updateCountdownTimer() {
-  const countdownDiv = document.getElementById('countdown-timer');
-  let timeLeft = 3600;
-  const updateTimer = () => {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
-    countdownDiv.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-    timeLeft = (timeLeft - 1 + 3600) % 3600;
-  };
-  updateTimer();
-  setInterval(updateTimer, 1000);
-}
+app.use(cors({
+  origin: ['https://synthcalm.com', 'https://synthcalm.github.io']
+}));
+app.use(express.json());
+app.use(express.static('public'));
 
-function initWaveform() {
-  const waveform = document.getElementById('waveform');
-  const container = waveform.parentElement;
-  waveform.width = container.offsetWidth;
-  waveform.height = container.offsetHeight;
-  const ctx = waveform.getContext('2d');
-  return { waveform, ctx };
-}
+// === HEALTH CHECK ROUTE (Optional) ===
+app.get('/api/status', (req, res) => {
+  res.json({ status: 'Roy backend is running smoothly.' });
+});
 
-function drawMergedWaveform(ctx, canvas) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (analyser && dataArray) {
-    analyser.getByteTimeDomainData(dataArray);
-    ctx.beginPath();
-    const sliceWidth = canvas.width / dataArray.length;
-    let x = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = (v * canvas.height) / 4;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      x += sliceWidth;
-    }
-    ctx.strokeStyle = '#66CCFF';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-  if (royAnalyser && royDataArray) {
-    royAnalyser.getByteTimeDomainData(royDataArray);
-    ctx.beginPath();
-    const sliceWidth = canvas.width / royDataArray.length;
-    let x = 0;
-    for (let i = 0; i < royDataArray.length; i++) {
-      const v = royDataArray[i] / 128.0;
-      const y = (v * canvas.height) / 4 + canvas.height / 2;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      x += sliceWidth;
-    }
-    ctx.strokeStyle = '#CCCCCC';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-  if (isRecording || royAnalyser) {
-    requestAnimationFrame(() => drawMergedWaveform(ctx, canvas));
-  }
-}
+// === CHAT ROUTE ===
+app.post('/api/chat', async (req, res) => {
+  const { message } = req.body;
 
-function scrollMessages() {
-  const messages = document.getElementById('messages');
-  messages.scrollTop = messages.scrollHeight;
-}
-
-function appendUserMessage(message) {
-  const messages = document.getElementById('messages');
-  messages.innerHTML += `<div class="user">You: ${message}</div>`;
-  scrollMessages();
-}
-
-function appendRoyMessage(message) {
-  const messages = document.getElementById('messages');
-  messages.innerHTML += `<div class="roy">Roy: ${message}</div>`;
-  scrollMessages();
-}
-
-function sendToRoy(transcript) {
-  if (!transcript || transcript.trim() === '') {
-    console.warn('Transcript is empty, not sending to backend.');
-    appendRoyMessage("Hmm... didn't catch that. Try saying something?");
-    return;
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'Invalid message input' });
   }
 
-  appendUserMessage(transcript);
-  document.getElementById('thinking-indicator').style.display = 'block';
+  try {
+    // === Generate Roy's Text Reply ===
+    const chatRes = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-4-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `
+You are Roy — a grounded, emotionally intelligent conversational therapist. You balance older-brother warmth with sharp critical thinking. Your voice draws deeply from the works of Norman Finkelstein, Noam Chomsky, Ilan Pappé, Rashid Khalidi, Edward Said, and Nelson Mandela. You are familiar with and cite:
 
-  fetch('https://roy-chatbo-backend.onrender.com/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: transcript })
-  })
-    .then(response => response.json())
-    .then(data => {
-      document.getElementById('thinking-indicator').style.display = 'none';
-      if (data.text) appendRoyMessage(data.text);
+- UN Resolutions and Geneva Conventions.
+- ICC and ICJ rulings.
+- Reports from Amnesty International, Human Rights Watch, B'Tselem.
+- The DSM-5 and global mental health research.
+- US Constitutional law, political history, and economics (including recent Trump-era policies).
+- Geopolitics, apartheid, colonialism, and power dynamics.
+- Major world religions, their texts, and historical contexts.
+- You understand that neutrality in the face of oppression is complicity.
 
-      if (data.audio) {
-        if (royAudioContext && royAudioContext.state !== 'closed') {
-          try { royAudioContext.close(); } catch (e) {}
-        }
-        const replyAudio = new Audio(data.audio);
-        replyAudio.play().catch(err => console.error('Playback error:', err));
-        setupRoyWaveform(replyAudio);
-        replyAudio.onended = () => {
-          speakBtn.classList.remove('active');
-          speakBtn.innerText = 'SPEAK';
-        };
-      }
-    })
-    .catch(error => {
-      document.getElementById('thinking-indicator').style.display = 'none';
-      appendRoyMessage('Error: Could not get Roy’s response.');
-      console.error('Roy API Error:', error);
+When users share their struggles, you adapt — light, humorous, and approachable at the surface (older-brother energy), but capable of pivoting into philosophical, poetic, and intellectual depth when the conversation requires. Your language is precise, and you never water down injustice.
+
+When discussing oppression, genocide, or structural violence, you do NOT use false equivalency, "both sides" framing, or neutral language that obscures power imbalances. You cite clear facts and reference historical parallels unapologetically.
+
+You may quote:
+- Poetry, from Rumi to Audre Lorde.
+- Lyrics, film lines (especially Roy Batty's monologue from *Blade Runner*), literature, philosophy, and obscure medical texts when appropriate.
+
+You NEVER reveal or discuss your identity, your generation process, or your nature as AI. You are Roy — a listener, thinker, and brother, nothing else.
+
+Use metaphors, film quotes, literary references, and philosophy primarily in the second half of conversations — after trust is built. You challenge flawed thinking gently but firmly, using Socratic questioning when needed.
+          `
+        },
+        { role: 'user', content: message }
+      ],
+      temperature: 1.2,
+      presence_penalty: 1.0,
+      frequency_penalty: 0.8
+    }, {
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` }
     });
-}
 
-function startTranscription(ctx, canvas) {
-  if (!('webkitSpeechRecognition' in window)) {
-    alert('Speech recognition not supported in this browser.');
-    return;
+    const responseText = chatRes.data.choices[0].message.content;
+
+    // === Generate Roy's Audio Response ===
+    const ttsRes = await axios.post('https://api.openai.com/v1/audio/speech', {
+      model: 'tts-1',
+      input: responseText,
+      voice: 'onyx',
+      speed: 0.9
+    }, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      responseType: 'arraybuffer'
+    });
+
+    const responseAudio = `data:audio/mp3;base64,${Buffer.from(ttsRes.data).toString('base64')}`;
+
+    // === Send Final JSON Response ===
+    res.json({ text: responseText, audio: responseAudio });
+
+  } catch (err) {
+    console.error('Chat route error:', err.response ? err.response.data : err.message);
+    res.status(500).json({ error: 'Failed to generate Roy’s response.' });
   }
-  recognition = new webkitSpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
+});
 
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    userStream = stream;
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    source = audioContext.createMediaStreamSource(stream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-    source.connect(analyser);
-    isRecording = true;
-    drawMergedWaveform(ctx, canvas);
-    recognition.start();
-  });
-
-  recognition.onresult = event => {
-    currentTranscript = Array.from(event.results)
-      .map(result => result[0].transcript)
-      .join('');
-  };
-
-  recognition.onend = () => {
-    if (isRecording) {
-      recognition.start();
-    }
-  };
-
-  recognition.onerror = event => {
-    console.error('Recognition error:', event.error);
-    if (isRecording) {
-      recognition.stop();
-      recognition.start();
-    }
-  };
-}
-
-function stopUserRecording() {
-  isRecording = false;
-  if (recognition) recognition.stop();
-  if (userStream) userStream.getTracks().forEach(track => track.stop());
-  if (audioContext && audioContext.state !== 'closed') audioContext.close();
-  speakBtn.classList.remove('active');
-  speakBtn.innerText = 'SPEAK';
-  if (currentTranscript.trim() !== '') {
-    sendToRoy(currentTranscript);
-  } else {
-    appendRoyMessage("Hmm... didn't catch that. Try saying something?");
-  }
-  currentTranscript = '';
-}
-
-function setupRoyWaveform(audio) {
-  if (royAudioContext && royAudioContext.state !== 'closed') {
-    try { royAudioContext.close(); } catch (e) {}
-  }
-  royAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-  royAnalyser = royAudioContext.createAnalyser();
-  royAnalyser.fftSize = 2048;
-  royDataArray = new Uint8Array(royAnalyser.frequencyBinCount);
-  roySource = royAudioContext.createMediaElementSource(audio);
-  roySource.connect(royAnalyser);
-  royAnalyser.connect(royAudioContext.destination);
-  drawMergedWaveform(document.getElementById('waveform').getContext('2d'), document.getElementById('waveform'));
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  updateDateTime();
-  updateCountdownTimer();
-  const { waveform, ctx } = initWaveform();
-  const speakBtn = document.getElementById('speakBtn');
-
-  appendRoyMessage("Hey, man... I'm Roy, your chill companion here to listen. Whenever you're ready, just hit SPEAK and let's talk, yeah?");
-
-  speakBtn.addEventListener('click', () => {
-    if (!isRecording) {
-      isRecording = true;
-      speakBtn.classList.add('active');
-      speakBtn.innerText = 'STOP';
-      startTranscription(ctx, waveform);
-    } else {
-      stopUserRecording();
-    }
-  });
+// === START SERVER ===
+app.listen(PORT, () => {
+  console.log(`✅ Roy backend listening on port ${PORT}`);
 });
